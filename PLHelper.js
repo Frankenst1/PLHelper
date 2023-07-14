@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.1.0
+// @version      0.1.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -249,6 +249,10 @@
     function calculateRemainingDownloadQuota(){
         const nDownloaded = countDownloadedToday();
 
+        return getDownloadQuotaForProfile() - nDownloaded;
+    }
+
+    function getDownloadQuotaForProfile(){
         // TODO: fetch/store this data from GM_setValue() with profile data. This allows us to call this method from non-profile pages as well (maybe show on tracker overview).
         const currentRatio = document.querySelector('#u_ratio b.gen')?.innerText;
         let downTotal = document.querySelector("#u_down_total span")?.innerHTML.split("&nbsp;");
@@ -256,9 +260,7 @@
         downTotal = convertSizeBetweenUnits(downTotal[0], downTotal[1], "GB");
         upTotal = convertSizeBetweenUnits(upTotal[0], upTotal[1], "GB");
 
-        const currentLimit = calculateDownloadLimit(upTotal, downTotal, currentRatio);
-
-        return currentLimit - nDownloaded;
+        return calculateDownloadLimit(upTotal, downTotal, currentRatio);
     }
 
     // Returns "true" if on the correct page.
@@ -619,7 +621,7 @@
             const nextRatioDept = '';
 
             const downloadsRemaining = calculateRemainingDownloadQuota();
-            const quotaPercentage = downloadsRemaining > 0 ? countDownloadedToday() / downloadsRemaining : 0;
+            const quotaPercentage = (1-downloadsRemaining/getDownloadQuotaForProfile())*100;
             ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio}).</b></div></td>`;
             downloadedStatsTr.innerHTML = `<th>Torrents downloaded:</th><td><div><b>${countDownloadedToday()}</b></div></td>`;
             const resetDownloadStatElement = document.createElement('a');
