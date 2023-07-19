@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.1.2
+// @version      0.1.3
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -153,7 +153,8 @@
         }
 
         const rating = totalDown !== 0 ? (totalUp + totalRelease + totalBonus) / totalDown : 0;
-        return rating.toFixed(2);
+
+        return Math.floor(rating * 100) / 100;
     }
 
 
