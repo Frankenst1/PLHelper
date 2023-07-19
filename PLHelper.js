@@ -153,7 +153,8 @@
         }
 
         const rating = totalDown !== 0 ? (totalUp + totalRelease + totalBonus) / totalDown : 0;
-        return rating.toFixed(2);
+
+        return Math.floor(rating * 100) / 100;
     }
 
 
