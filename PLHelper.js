@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.1.5
+// @version      0.2.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -18,7 +18,7 @@
 (function () {
     'use strict';
 
-    // TODO: ability to change settings (set preference of skipping/hiding/... downloaded torrents, ability to set preferences (video quality, tags, ...)).
+    // TODO: ability to change settings (ability to set preferences (video quality, tags, ...)).
     // TODO: add proper debugging.
     // TODO: add ability to start downloading the torrents as well?
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
