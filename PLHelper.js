@@ -11,6 +11,7 @@
 // @grant        GM_openInTab
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_deleteValue
 // @grant        GM_addStyle
 // ==/UserScript==
 
@@ -22,6 +23,7 @@
     // TODO: add ability to start downloading the torrents as well?
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const TORRENT_STORAGE_KEY = 'downloadedTorrents';
+    const PROFILE_PREFERENCES_KEY = 'profile_preferences';
 
     // TODO: move these constants to a "profile settings" page.
     const PREFERRED_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
@@ -49,6 +51,12 @@
             this.id = id;
             this.title = title;
             this.pageUrl = pageUrl ? pageUrl : `./forum/tracker.php?f=${id}`;
+        }
+    }
+
+    class ProfilePreferences {
+        constructor(hideDownloadedTorrents) {
+            this.hideDownloadedTorrents = hideDownloadedTorrents;
         }
     }
 
@@ -205,7 +213,7 @@
 
     function isTorrentAlreadyDownloaded(torrentId) {
         const downloadedTorrents = getAllDownloadedTorrents();
-        return downloadedTorrents.some((obj) => obj.id === torrentId);
+        return downloadedTorrents.some((obj) => obj.id == torrentId);
     }
 
     function getTorrentDownloadLink(torrent) {
@@ -303,6 +311,7 @@
 
     function getAllDownloadLinksWithString(searchStrings = []) {
         const torrentRows = document.querySelectorAll('#tor-tbl tr.tCenter');
+        const downloadedtorrents = getAllDownloadedTorrents();
 
         const filteredTorrentsByString = {};
 
@@ -322,8 +331,17 @@
                 const size = row.querySelector('td:nth-of-type(6)').textContent?.trim();
                 const id = url.split('?t=').pop();
 
-                return new Torrent(id, subject, url, size, topic);
-            });
+                const torrent = new Torrent(id, subject, url, size, topic);
+
+                const hideDownloadedTorrents = getProfilePreferences()?.hideDownloadedTorrents ?? false;
+                const isAlreadyDownloaded = isTorrentAlreadyDownloaded(id);
+
+                if (!isAlreadyDownloaded && !hideDownloadedTorrents) {
+                    return torrent;
+                }
+            }).filter((value) => value !== undefined);
+
+            console.log(filteredTorrents);
 
             filteredTorrentsByString[searchString] = filteredTorrents;
         });
@@ -331,8 +349,33 @@
         return filteredTorrentsByString;
     }
 
-    function getAllDownloadedTorrents(){
+    function getAllDownloadedTorrents() {
         return GM_getValue(TORRENT_STORAGE_KEY, []);
+    }
+
+    function getProfilePreferences() {
+        let preferences = GM_getValue(PROFILE_PREFERENCES_KEY);
+
+        if (!preferences) {
+            console.debug("No preferences found. Creating new ones.");
+            preferences = new ProfilePreferences();
+            setProfilePreferences(preferences);
+        }
+
+        return preferences;
+    }
+
+    function setProfilePreferences(profilePreferences) {
+        GM_setValue(PROFILE_PREFERENCES_KEY, profilePreferences);
+    }
+
+    function resetAllData() {
+        const confirmReset = confirm("Reset all to default settings? This cannot be undone.");
+        if (confirmReset) {
+            GM_deleteValue(TORRENT_STORAGE_KEY);
+            GM_deleteValue(PROFILE_PREFERENCES_KEY);
+            location.reload();
+        }
     }
 
     // DOM creation section
@@ -450,12 +493,12 @@
             const dwndBtnCallback = (e) => {
                 e.preventDefault();
 
-                console.log(`Start opening tabs (ETA: ${eta})`);
+                console.debug(`Start opening tabs (ETA: ${eta})`);
                 const matches = torrents[filter];
                 matches.forEach((torrent, index) => {
                     setTimeout(() => {
                         const percentage = Math.floor((index + 1) / length * 100);
-                        console.log(`Downloading ${index + 1}/${length} (${percentage}%) - ${torrent.pageUrl}`);
+                        console.debug(`Downloading ${index + 1}/${length} (${percentage}%) - ${torrent.pageUrl}`);
                         GM_openInTab(torrent.pageUrl);
 
                         const torrentLink = document.querySelector(`a[href="./viewtopic.php?t=${torrent.id}"]`);
@@ -549,6 +592,27 @@
         return button;
     }
 
+    function generateToggle(labelText, initialValue, callback) {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        const span = document.createElement("span");
+
+        input.type = "checkbox";
+
+        input.checked = initialValue;
+
+        input.addEventListener("change", () => {
+            callback(input.checked);
+        });
+
+        span.textContent = labelText;
+
+        label.appendChild(input);
+        label.appendChild(span);
+
+        return label;
+    }
+
     // Event listener section
     function handleDownloadTorrent() {
         const downloadTorrentBtn = document.querySelector('#tor-reged .dl-stub.dl-link');
@@ -599,7 +663,8 @@
 
     function getDataForExport() {
         const data = {
-            downloadedTorrents: getAllDownloadedTorrents()
+            downloadedTorrents: getAllDownloadedTorrents(),
+            preferences: getProfilePreferences(),
         };
         return data;
     }
@@ -631,9 +696,9 @@
         downloadLink.remove();
     }
 
-    function initiateImport(){
+    function initiateImport() {
         const confirmImport = confirm("Importing will override all current data. Torrent downloads might not be accurate when overriding with older data.");
-        if(!confirmImport){
+        if (!confirmImport) {
             return;
         }
         const userInput = window.prompt("Enter export data here:");
@@ -661,7 +726,6 @@
             const wrapperDiv = document.createElement('div');
             wrapperDiv.classList.add('active-torrents-list');
             wrapperDiv.innerHTML = '<div class="table-title">Already downloaded torrents.</div>';
-            console.log(wrapperDiv.innerHTML);
             wrapperDiv.appendChild(downloadedTorrentsTable);
             parent.appendChild(wrapperDiv);
 
@@ -702,8 +766,20 @@
 
             const downloadDataButton = generateButton('bold clickable', `Download user data.`, initiateExport);
             const importDataButton = generateButton('bold clickable', `Import user data.`, initiateImport);
+            const resetDataButton = generateButton('bold clickable leech', `Reset to default.`, resetAllData);
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', downloadDataButton);
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', importDataButton);
+            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', resetDataButton);
+
+
+            const preferences = getProfilePreferences();
+            const hideDownloadedTorrents = preferences?.hideDownloadedTorrents ?? false;
+            const toggleContainer = document.getElementById("toggleContainer"); // Replace with your container element ID
+            const skipDownloadedToggle = generateToggle("Hide already downloaded torrents.", hideDownloadedTorrents, (checked) => {
+                preferences.hideDownloadedTorrents = checked;
+                setProfilePreferences(preferences);
+            });
+            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', skipDownloadedToggle);
         }
 
         if (checkPage('torrent_page')) {
