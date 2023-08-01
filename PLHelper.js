@@ -14,12 +14,12 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
-    // TODO: add ability to import/export settings and saved data (saved torrents).
     // TODO: ability to change settings (set preference of skipping/hiding/... downloaded torrents, ability to set preferences (video quality, tags, ...)).
     // TODO: add proper debugging.
+    // TODO: add ability to start downloading the torrents as well?
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const TORRENT_STORAGE_KEY = 'downloadedTorrents';
 
@@ -45,7 +45,7 @@
     }
 
     class TorrentTopic {
-        constructor(id, title, pageUrl = null){
+        constructor(id, title, pageUrl = null) {
             this.id = id;
             this.title = title;
             this.pageUrl = pageUrl ? pageUrl : `./forum/tracker.php?f=${id}`;
@@ -81,9 +81,9 @@
         return `${formattedValue} ${unit}`;
     }
 
-    function getIdFromUrl(url, type){
+    function getIdFromUrl(url, type) {
         let id = null;
-        switch(type){
+        switch (type) {
             case 'topic':
                 id = url.split('?f=').pop();
                 break;
@@ -95,7 +95,7 @@
                 break;
         }
 
-        if (id === url){
+        if (id === url) {
             console.debug(`Invalid URL (${url}) for type (${type}).`);
             return false;
         }
@@ -134,7 +134,7 @@
             const todayValue = getSizeValue(row.querySelector('td:nth-of-type(2)'), element.index);
             const totalValue = getSizeValue(row.querySelector('td:nth-of-type(4)'), element.index);
 
-            switch(element.index){
+            switch (element.index) {
                 case 1:
                     totalDown = updateValue + todayValue + totalValue;
                     break;
@@ -186,15 +186,15 @@
         return requiredUpload;
     }
 
-    function markDownloadedTorrents(){
+    function markDownloadedTorrents() {
         const torrentRows = document.querySelectorAll('#tor-tbl tr.tCenter');
 
         torrentRows.forEach((row) => {
             const torrentLinkEl = row.querySelector('td:nth-of-type(4) a');
             const torrentLink = torrentLinkEl?.href;
             const torrentId = getIdFromUrl(torrentLink, 'torrent');
-            if(isTorrentAlreadyDownloaded(torrentId)){
-                torrentLinkEl?.setAttribute('style','color:green;');
+            if (isTorrentAlreadyDownloaded(torrentId)) {
+                torrentLinkEl?.setAttribute('style', 'color:green;');
             }
         });
     }
@@ -204,20 +204,20 @@
     }
 
     function isTorrentAlreadyDownloaded(torrentId) {
-        const downloadedTorrents = GM_getValue(TORRENT_STORAGE_KEY, []);
+        const downloadedTorrents = getAllDownloadedTorrents();
         return downloadedTorrents.some((obj) => obj.id === torrentId);
     }
 
-    function getTorrentDownloadLink(torrent){
+    function getTorrentDownloadLink(torrent) {
         return `dl.php?t=${torrent.id}`;
     }
 
-    function getTorrentPage(torrent){
+    function getTorrentPage(torrent) {
         return `./viewtopic.php?t=${torrent.id}`;
     }
 
-    function countDownloadedToday(){
-        const downloadedTorrents = GM_getValue(TORRENT_STORAGE_KEY, []);
+    function countDownloadedToday() {
+        const downloadedTorrents = getAllDownloadedTorrents();
         const today = new Date();
         const todayItems = downloadedTorrents.filter(torrent => {
             const torrentDate = new Date(torrent.downloadDate);
@@ -247,13 +247,13 @@
         }
     }
 
-    function calculateRemainingDownloadQuota(){
+    function calculateRemainingDownloadQuota() {
         const nDownloaded = countDownloadedToday();
 
         return getDownloadQuotaForProfile() - nDownloaded;
     }
 
-    function getDownloadQuotaForProfile(){
+    function getDownloadQuotaForProfile() {
         // TODO: fetch/store this data from GM_setValue() with profile data. This allows us to call this method from non-profile pages as well (maybe show on tracker overview).
         const currentRatio = document.querySelector('#u_ratio b.gen')?.innerText;
         let downTotal = document.querySelector("#u_down_total span")?.innerHTML.split("&nbsp;");
@@ -269,7 +269,7 @@
         let cp = location.pathname;
         switch (page) {
             case 'profile_page':
-                return cp.includes('profile.php');
+                return cp.includes('profile.php') && document.getElementById('passkey-val');
             case 'tracker_page':
                 return cp.includes('tracker.php');
             case 'torrent_page':
@@ -288,7 +288,7 @@
             const torrentType = row.querySelector('td:nth-of-type(1) a').innerText;
 
             if (torrentType.includes('Picture')) {
-                const torrentId = row.querySelector('td:nth-of-type(4) a').getAttribute('href').replace('./','').replace('viewtopic.php?t=','');
+                const torrentId = row.querySelector('td:nth-of-type(4) a').getAttribute('href').replace('./', '').replace('viewtopic.php?t=', '');
                 const torrentTitle = row.querySelector('td:nth-of-type(4) a').innerText;
                 const pageUrl = new URL(row.querySelector('td:nth-of-type(4) a').getAttribute('href'), document.baseURI).href;
                 const torrentSize = row.querySelector('td:nth-of-type(6) a').innerText;
@@ -331,8 +331,12 @@
         return filteredTorrentsByString;
     }
 
+    function getAllDownloadedTorrents(){
+        return GM_getValue(TORRENT_STORAGE_KEY, []);
+    }
+
     // DOM creation section
-    function createTorrentsTable(torrents){
+    function generateTorrentsTable(torrents) {
         // Create the table element
         const table = document.createElement('table');
         table.className = 'forumline tablesorter';
@@ -385,7 +389,7 @@
             forumLink.className = 'gen f';
             const forumId = item.topic?.id;
             forumLink.href = `https://pornolab.net/forum/tracker.php?f=${forumId}`;
-            forumLink.innerText = item.topic?.title ? item.topic?.title : 'N/A' ;
+            forumLink.innerText = item.topic?.title ? item.topic?.title : 'N/A';
             forumColumn.appendChild(forumLink);
             row.appendChild(forumColumn);
 
@@ -411,7 +415,7 @@
             addedColumn.className = 'row4 small nowrap';
             const addedText = document.createElement('p');
             addedText.innerText = 'N/A';
-            if(typeof item.downloadDate === 'string' || item.downloadDate instanceof String){
+            if (typeof item.downloadDate === 'string' || item.downloadDate instanceof String) {
                 addedText.innerText = item.downloadDate;
             }
             addedColumn.appendChild(addedText);
@@ -435,7 +439,7 @@
         return table;
     }
 
-    function generateArrayOfDownloadButtons(torrents){
+    function generateArrayOfDownloadButtons(torrents) {
         const downloadButtons = [];
 
         // TODO: move to different method!
@@ -469,7 +473,7 @@
         return downloadButtons;
     }
 
-    function createLoadingDiv(torrent){
+    function generateLoadingDiv(torrent) {
         // Create the outer div element with class "lds-ring"
         const outerDiv = document.createElement('div');
         outerDiv.classList.add('lds-ripple');
@@ -486,7 +490,7 @@
         return outerDiv;
     }
 
-    function createProgressBar(percentage, id, helperText = null){
+    function generateProgressBar(percentage, id, helperText = null) {
         // Create the outer container div
         var containerDiv = document.createElement('div');
         containerDiv.className = 'progress-bar-container';
@@ -565,10 +569,10 @@
         });
     }
 
-    function updateProgressBar(id, percentage){
+    function updateProgressBar(id, percentage) {
         const progressBar = document.getElementById(id);
 
-        if(progressBar){
+        if (progressBar) {
             const progress = document.querySelector('.progress-bar');
             progressBar.style.display = 'block';
             progress.style.width = `${percentage}%`;
@@ -578,7 +582,7 @@
 
     // Handles the "download" event.
     function downloadTorrent(event, torrent) {
-        const downloadedTorrents = GM_getValue(TORRENT_STORAGE_KEY, []);
+        const downloadedTorrents = getAllDownloadedTorrents();
         if (isTorrentAlreadyDownloaded(torrent.id)) {
             const response = confirm("Torrent has been marked as downloaded. Redownload?");
             if (!response) {
@@ -589,16 +593,69 @@
         }
 
         torrent.downloadDate = new Date().toJSON()
-        console.log(torrent);
         downloadedTorrents.push(torrent);
         GM_setValue(TORRENT_STORAGE_KEY, downloadedTorrents);
+    }
+
+    function getDataForExport() {
+        const data = {
+            downloadedTorrents: getAllDownloadedTorrents()
+        };
+        return data;
+    }
+
+    function getCurrentDateTimeString() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0"); // Months are zero-based, so we add 1
+        const day = String(now.getDate()).padStart(2, "0");
+        const hour = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+
+        const dateTimeString = `${year}${month}${day}${hour}${minutes}`;
+        return dateTimeString;
+    }
+
+    // Handles "export" event.
+    function initiateExport() {
+        const jsonStr = JSON.stringify(getDataForExport());
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = `data${getCurrentDateTimeString()}.json`;
+        downloadLink.click();
+
+        URL.revokeObjectURL(url);
+        downloadLink.remove();
+    }
+
+    function initiateImport(){
+        const confirmImport = confirm("Importing will override all current data. Torrent downloads might not be accurate when overriding with older data.");
+        if(!confirmImport){
+            return;
+        }
+        const userInput = window.prompt("Enter export data here:");
+
+        if (userInput !== null) {
+            console.debug("Starting import");
+            const importData = JSON.parse(userInput);
+
+            const torrentData = importData.downloadedTorrents;
+            GM_setValue(TORRENT_STORAGE_KEY, torrentData);
+
+            location.reload();
+        } else {
+            console.debug("No input provided. Import aborted.");
+        }
     }
 
     // Main (init) section.
     function initializeScript() {
         // Page specific script loading.
         if (checkPage('profile_page')) {
-            const downloadedTorrentsTable = createTorrentsTable(GM_getValue(TORRENT_STORAGE_KEY, []));
+            const downloadedTorrentsTable = generateTorrentsTable(getAllDownloadedTorrents());
             const parent = document.querySelector('#main_content_wrap');
 
             const wrapperDiv = document.createElement('div');
@@ -621,7 +678,7 @@
             const nextRatioDept = '';
 
             const downloadsRemaining = calculateRemainingDownloadQuota();
-            const quotaPercentage = (1-downloadsRemaining/getDownloadQuotaForProfile())*100;
+            const quotaPercentage = Math.floor((1 - downloadsRemaining / getDownloadQuotaForProfile()) * 100);
             ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio}).</b></div></td>`;
             downloadedStatsTr.innerHTML = `<th>Torrents downloaded:</th><td><div><b>${countDownloadedToday()}</b></div></td>`;
             const resetDownloadStatElement = document.createElement('a');
@@ -630,18 +687,23 @@
             resetDownloadStatElement.addEventListener('click', (e) => {
                 e.preventDefault();
                 const response = confirm("Reset download stats? Remaining quota might be inaccurate (until next server reset).");
-                if(response){
+                if (response) {
                     resetTorrentsMarkedAsDownloaded();
                     location.reload();
                 }
             });
             downloadedStatsTr.querySelector('td div').appendChild(resetDownloadStatElement);
-            downloadRemainingTr.innerHTML = `<th>Torrents download quota left:</th><td><div><b>${createProgressBar(quotaPercentage, 'download-remaining-bar', downloadsRemaining).outerHTML}</b></div></td>`;
+            downloadRemainingTr.innerHTML = `<th>Torrents download quota left:</th><td><div><b>${generateProgressBar(quotaPercentage, 'download-remaining-bar', downloadsRemaining).outerHTML}</b></div></td>`;
 
             const lastElement = usersTable.querySelector('#ratio-expl-raw');
             lastElement.insertAdjacentElement('afterend', downloadRemainingTr);
             lastElement.insertAdjacentElement('afterend', downloadedStatsTr);
             lastElement.insertAdjacentElement('afterend', ratioPredictionTr);
+
+            const downloadDataButton = generateButton('bold clickable', `Download user data.`, initiateExport);
+            const importDataButton = generateButton('bold clickable', `Import user data.`, initiateImport);
+            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', downloadDataButton);
+            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', importDataButton);
         }
 
         if (checkPage('torrent_page')) {
@@ -664,7 +726,7 @@
             });
 
             // Create the progress bar to match the progress of the tab opener, but hide it until it's needed.
-            const progressBar = createProgressBar(0, 'torrent-open-tab-progress-bar');
+            const progressBar = generateProgressBar(0, 'torrent-open-tab-progress-bar');
             progressBar.style.display = 'none';
 
             // Create markup and render the buttons for download groups.
@@ -677,7 +739,6 @@
 
             buttonsLegendTr.appendChild(buttonsLegend);
             searchTableSectionBody.appendChild(buttonsLegendTr);
-
         }
     }
 
