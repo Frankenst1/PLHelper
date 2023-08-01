@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.1.3
+// @version      0.1.4
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -374,7 +374,6 @@
         // Create the table body
         const tbody = document.createElement('tbody');
 
-        console.log(torrents);
         // Iterate over the data and generate table rows
         torrents.forEach((item) => {
             const row = document.createElement('tr');
@@ -599,7 +598,7 @@
     function initializeScript() {
         // Page specific script loading.
         if (checkPage('profile_page')) {
-            const downloadedTorrentsTable = createTorrentsTable(GM_getValue(TORRENT_STORAGE_KEY));
+            const downloadedTorrentsTable = createTorrentsTable(GM_getValue(TORRENT_STORAGE_KEY, []));
             const parent = document.querySelector('#main_content_wrap');
 
             const wrapperDiv = document.createElement('div');
