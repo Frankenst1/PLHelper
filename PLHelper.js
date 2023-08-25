@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.1
+// @version      0.4.2
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -474,7 +474,7 @@
     // Function to display information about the freeleech event
     function getFreeleechInfo() {
         const now = new Date();
-        const mskOffset = 3; // MSK timezone offset in hours
+        const mskOffset = getMSKOffset(); // MSK timezone offset in hours
         const nextEventStart = getNextFreeleechDate();
         const eventStart = new Date(nextEventStart);
 
