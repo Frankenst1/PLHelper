@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.0
+// @version      0.4.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -24,6 +24,7 @@
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const TORRENT_STORAGE_KEY = 'downloadedTorrents';
     const PROFILE_PREFERENCES_KEY = 'profile_preferences';
+    const SERVER_TIMEZONE = 'Europe/Moscow';
 
     // TODO: move these constants to a "profile settings" page.
     const PREFERRED_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
@@ -415,28 +416,71 @@
         leechInfoElement.innerText = getFreeleechInfo();
     }
 
-    // Function to calculate the next occurrence of the last Saturday in MSK timezone
-    function getNextLastSaturday() {
-        const currentDate = new Date();
-        const currentMonth = currentDate.getUTCMonth();
+    function getServerTime(){
+        // Define the MSK timezone offset in minutes
+        const mskOffset = 3 * 60; // Moscow Standard Time is UTC+3
+
+        // Get the current UTC time in milliseconds
+        const currentUTCTime = Date.now();
+
+        // Calculate the MSK time by adding the offset
+        const currentMSKTime = new Date(currentUTCTime + mskOffset * 60 * 1000);
+
+        // Format the time
+        const formattedTime = currentMSKTime.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+
+        console.log(`Current time in MSK timezone: ${formattedTime}`);
+    }
+
+    function getNextFreeleechDate() {
+        const mskOffset = getMSKOffset();
+
+        // Get the current date in MSK timezone
+        const currentDate = new Date(Date.now() + mskOffset * 60 * 1000);
+
+        // Get the current year and month
         const currentYear = currentDate.getUTCFullYear();
+        const currentMonth = currentDate.getUTCMonth();
 
-        const lastSaturday = new Date(Date.UTC(currentYear, currentMonth + 1, 0));
-        lastSaturday.setUTCHours(0, 0, 0, 0);
+        // Calculate the last day of the current month
+        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getUTCDate();
 
-        while (lastSaturday.getUTCDay() !== 6) {
-            lastSaturday.setUTCDate(lastSaturday.getUTCDate() - 1);
+        // Find the last Saturday of the month
+        let freeleechDate;
+        for (let day = lastDayOfMonth; day > 0; day--) {
+            const dayDate = new Date(currentYear, currentMonth, day);
+            if (dayDate.getUTCDay() === 6) { // Saturday
+                freeleechDate = dayDate;
+                break;
+            }
         }
 
-        return lastSaturday;
+        // Set the time to the start of the day
+        freeleechDate.setUTCHours(0, 0, 0, 0);
+
+        // Adjust for MSK timezone offset
+        freeleechDate.setUTCMinutes(freeleechDate.getUTCMinutes() - mskOffset);
+
+        return freeleechDate;
+    }
+
+    function getMSKOffset() {
+        const mskTimeZone = SERVER_TIMEZONE;
+        const date = new Date();
+        const options = { timeZone: mskTimeZone };
+        return date.getTimezoneOffset() * -1; // Convert to positive
     }
 
     // Function to display information about the freeleech event
     function getFreeleechInfo() {
         const now = new Date();
         const mskOffset = 3; // MSK timezone offset in hours
-        const nextEventStart = getNextLastSaturday();
+        const nextEventStart = getNextFreeleechDate();
         const eventStart = new Date(nextEventStart);
+
+        console.log(nextEventStart);
+        console.log(eventStart);
+
         eventStart.setUTCHours(eventStart.getUTCHours() + mskOffset);
         const eventEnd = new Date(eventStart);
         eventEnd.setUTCDate(eventEnd.getUTCDate() + 1);
