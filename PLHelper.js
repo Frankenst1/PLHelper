@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.2
+// @version      0.4.3
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -388,14 +388,14 @@
     }
 
     function getTimeUntilMidnightMSK() {
-        const now = new Date();
-        const midnightMSK = new Date();
-        midnightMSK.setUTCHours(21); // 21 corresponds to 00:00 MSK because MSK is UTC+3
-        midnightMSK.setUTCMinutes(0);
-        midnightMSK.setUTCSeconds(0);
-        midnightMSK.setUTCMilliseconds(0);
+        const mskOffset = getMSKOffset();
+        const now = Date.now();
+        const currentTimeMSK = new Date(now + mskOffset);
 
-        const timeDifference = midnightMSK - now;
+        const midnightMSK = new Date(currentTimeMSK);
+        midnightMSK.setUTCHours(21, 0, 0, 0); // 21 corresponds to 00:00 MSK because MSK is UTC+3
+
+        const timeDifference = midnightMSK - currentTimeMSK;
 
         const hours = Math.floor(timeDifference / (1000 * 60 * 60));
         const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
@@ -414,22 +414,6 @@
     function updateFreeleechInfo(){
         const leechInfoElement = document.getElementById('freeleech-countdown');
         leechInfoElement.innerText = getFreeleechInfo();
-    }
-
-    function getServerTime(){
-        // Define the MSK timezone offset in minutes
-        const mskOffset = 3 * 60; // Moscow Standard Time is UTC+3
-
-        // Get the current UTC time in milliseconds
-        const currentUTCTime = Date.now();
-
-        // Calculate the MSK time by adding the offset
-        const currentMSKTime = new Date(currentUTCTime + mskOffset * 60 * 1000);
-
-        // Format the time
-        const formattedTime = currentMSKTime.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
-
-        console.log(`Current time in MSK timezone: ${formattedTime}`);
     }
 
     function getNextFreeleechDate() {
