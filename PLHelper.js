@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.2.0
+// @version      0.3.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -111,9 +111,10 @@
         return id;
     }
 
-    function predictRatio() {
+    function getTorrentStats(){
         var sizeRegex = /^([\d.,]+)\s*([a-zA-Z]+)/;
 
+        // Help class to easily fetch the data we care about.
         function getSizeValue(element, index) {
             const content = element?.textContent.match(sizeRegex);
             if (content) {
@@ -160,7 +161,17 @@
             }
         }
 
-        const rating = totalDown !== 0 ? (totalUp + totalRelease + totalBonus) / totalDown : 0;
+        return {
+            'totalUp': totalUp,
+            'totalRelease': totalRelease,
+            'totalBonus': totalBonus,
+            'totalDown': totalDown,
+        };
+    }
+
+    function predictRatio() {
+        const stats = getTorrentStats();
+        const rating = stats.totalDown !== 0 ? (stats.totalUp + stats.totalRelease + stats.totalBonus) / stats.totalDown : 0;
 
         return Math.floor(rating * 100) / 100;
     }
@@ -737,13 +748,12 @@
 
             const predictedRatio = predictRatio();
             const nextRatio = getNearestRatio(predictedRatio);
-            // TODO:
-            // const nextRatioDept = formatBytes(calculateRequiredUploadRatio(currentDownload, currentUpload, 1));
-            const nextRatioDept = '';
+            const stats = getTorrentStats();
+            const nextRatioDept = formatBytes(calculateRequiredUploadRatio(stats.totalDown, stats.totalUp, nextRatio));
 
             const downloadsRemaining = calculateRemainingDownloadQuota();
             const quotaPercentage = Math.floor((1 - downloadsRemaining / getDownloadQuotaForProfile()) * 100);
-            ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio}).</b></div></td>`;
+            ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio} - ${nextRatioDept} upload needed.).</b></div></td>`;
             downloadedStatsTr.innerHTML = `<th>Torrents downloaded:</th><td><div><b>${countDownloadedToday()}</b></div></td>`;
             const resetDownloadStatElement = document.createElement('a');
             resetDownloadStatElement.href = '#';
