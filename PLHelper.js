@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.3.0
+// @version      0.4.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -176,7 +176,6 @@
         return Math.floor(rating * 100) / 100;
     }
 
-
     function getNearestRatio(ratio) {
         const ratios = [1, 0.5, 0.3];
         let nearestRatio = 0;
@@ -292,7 +291,7 @@
             case 'tracker_page':
                 return cp.includes('tracker.php');
             case 'torrent_page':
-                return cp.includes('viewtopic.php') && location.search.includes('?t=');
+                return cp.includes('viewtopic.php') && location.search.includes('?t=') && document.querySelector('.dl-link') !== null;
             default:
                 return false;
         }
@@ -352,8 +351,6 @@
                 }
             }).filter((value) => value !== undefined);
 
-            console.log(filteredTorrents);
-
             filteredTorrentsByString[searchString] = filteredTorrents;
         });
 
@@ -387,6 +384,87 @@
             GM_deleteValue(PROFILE_PREFERENCES_KEY);
             location.reload();
         }
+    }
+
+    function getTimeUntilMidnightMSK() {
+        const now = new Date();
+        const midnightMSK = new Date();
+        midnightMSK.setUTCHours(21); // 21 corresponds to 00:00 MSK because MSK is UTC+3
+        midnightMSK.setUTCMinutes(0);
+        midnightMSK.setUTCSeconds(0);
+        midnightMSK.setUTCMilliseconds(0);
+
+        const timeDifference = midnightMSK - now;
+
+        const hours = Math.floor(timeDifference / (1000 * 60 * 60));
+        const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
+
+        return `${hours} hours, ${minutes} minutes, ${seconds} seconds`;
+    }
+
+    // Function to update the time to reset display
+    function updateTimeToResetDisplay() {
+        const timeToReset = getTimeUntilMidnightMSK();
+        const timeToResetElement = document.getElementById('time-to-update');
+        timeToResetElement.textContent = `Time until quota update: ${timeToReset}`;
+    }
+
+    function updateFreeleechInfo(){
+        const leechInfoElement = document.getElementById('freeleech-countdown');
+        leechInfoElement.innerText = getFreeleechInfo();
+    }
+
+    // Function to calculate the next occurrence of the last Saturday in MSK timezone
+    function getNextLastSaturday() {
+        const currentDate = new Date();
+        const currentMonth = currentDate.getUTCMonth();
+        const currentYear = currentDate.getUTCFullYear();
+
+        const lastSaturday = new Date(Date.UTC(currentYear, currentMonth + 1, 0));
+        lastSaturday.setUTCHours(0, 0, 0, 0);
+
+        while (lastSaturday.getUTCDay() !== 6) {
+            lastSaturday.setUTCDate(lastSaturday.getUTCDate() - 1);
+        }
+
+        return lastSaturday;
+    }
+
+    // Function to display information about the freeleech event
+    function getFreeleechInfo() {
+        const now = new Date();
+        const mskOffset = 3; // MSK timezone offset in hours
+        const nextEventStart = getNextLastSaturday();
+        const eventStart = new Date(nextEventStart);
+        eventStart.setUTCHours(eventStart.getUTCHours() + mskOffset);
+        const eventEnd = new Date(eventStart);
+        eventEnd.setUTCDate(eventEnd.getUTCDate() + 1);
+        const timeUntilEvent = nextEventStart - now;
+
+        let freeleechInfo = '';
+        if (now < eventStart) {
+            const daysUntilEvent = Math.floor(timeUntilEvent / (1000 * 60 * 60 * 24));
+            const hoursUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutesUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60)) / (1000 * 60));
+            const secondsUntilEvent = Math.floor((timeUntilEvent % (1000 * 60)) / 1000);
+
+            freeleechInfo = `Next freeleech event: (${daysUntilEvent}d ${hoursUntilEvent}h ${minutesUntilEvent}m ${secondsUntilEvent}s).`;
+        } else if (now < eventEnd) {
+            const eventDuration = eventEnd - eventStart;
+            const timeLeft = eventEnd - now;
+            const hoursLeft = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            const secondsLeft = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+            freeleechInfo = `FREELEECH NOW!!! Time remaining: ${hoursLeft}h, ${minutesLeft}m, ${secondsLeft}s.)`;
+            console.log(`The freeleech event is currently running.`);
+            console.log(`Time remaining: ${hoursLeft} hours, ${minutesLeft} minutes, ${secondsLeft} seconds.`);
+        } else {
+            console.log(`The last freeleech event has ended.`);
+        }
+
+        return freeleechInfo;
     }
 
     // DOM creation section
@@ -753,7 +831,9 @@
 
             const downloadsRemaining = calculateRemainingDownloadQuota();
             const quotaPercentage = Math.floor((1 - downloadsRemaining / getDownloadQuotaForProfile()) * 100);
-            ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio} - ${nextRatioDept} upload needed.).</b></div></td>`;
+            // Update the time display every second
+            setInterval(updateTimeToResetDisplay, 1000);
+            ratioPredictionTr.innerHTML = `<th>"Actual" ratio:</th><td><div><b>${predictedRatio} (next: ${nextRatio} - ${nextRatioDept} upload needed.).</b><br/><span id="time-to-update"></span></div></td>`;
             downloadedStatsTr.innerHTML = `<th>Torrents downloaded:</th><td><div><b>${countDownloadedToday()}</b></div></td>`;
             const resetDownloadStatElement = document.createElement('a');
             resetDownloadStatElement.href = '#';
@@ -826,7 +906,14 @@
             buttonsLegendTr.appendChild(buttonsLegend);
             searchTableSectionBody.appendChild(buttonsLegendTr);
         }
+
+        const logo = document.getElementById('logo-td');
+        const leechInfoElement = document.createElement('p');
+        leechInfoElement.setAttribute('id', 'freeleech-countdown');
+        logo.appendChild(leechInfoElement);
+        setInterval(updateFreeleechInfo, 1000);
     }
+
 
     initializeScript();
 })();
