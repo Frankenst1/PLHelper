@@ -347,13 +347,19 @@
                 const hideDownloadedTorrents = getProfilePreferences()?.hideDownloadedTorrents ?? false;
                 const isAlreadyDownloaded = isTorrentAlreadyDownloaded(id);
 
-                if (!isAlreadyDownloaded && !hideDownloadedTorrents) {
+                // NOT & HIDE = true & false -> false
+                if(hideDownloadedTorrents){
+                    if(!isAlreadyDownloaded){
+                        return torrent;
+                    }
+                } else {
                     return torrent;
                 }
             }).filter((value) => value !== undefined);
 
             filteredTorrentsByString[searchString] = filteredTorrents;
         });
+
 
         return filteredTorrentsByString;
     }
@@ -461,10 +467,6 @@
         const mskOffset = getMSKOffset(); // MSK timezone offset in hours
         const nextEventStart = getNextFreeleechDate();
         const eventStart = new Date(nextEventStart);
-
-        console.log(nextEventStart);
-        console.log(eventStart);
-
         eventStart.setUTCHours(eventStart.getUTCHours() + mskOffset);
         const eventEnd = new Date(eventStart);
         eventEnd.setUTCDate(eventEnd.getUTCDate() + 1);
@@ -486,10 +488,10 @@
             const secondsLeft = Math.floor((timeLeft % (1000 * 60)) / 1000);
 
             freeleechInfo = `FREELEECH NOW!!! Time remaining: ${hoursLeft}h, ${minutesLeft}m, ${secondsLeft}s.)`;
-            console.log(`The freeleech event is currently running.`);
-            console.log(`Time remaining: ${hoursLeft} hours, ${minutesLeft} minutes, ${secondsLeft} seconds.`);
+            console.debug(`The freeleech event is currently running.`);
+            console.debug(`Time remaining: ${hoursLeft} hours, ${minutesLeft} minutes, ${secondsLeft} seconds.`);
         } else {
-            console.log(`The last freeleech event has ended.`);
+            console.debug(`The last freeleech event has ended.`);
         }
 
         return freeleechInfo;
