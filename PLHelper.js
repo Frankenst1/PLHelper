@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.3
+// @version      0.4.4
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -393,13 +393,28 @@
         }
     }
 
-    function getTimeUntilMidnightMSK() {
+    function getServerTime(){
+        const mskOffset = getMSKOffset();
+        const now = Date.now();
+        const currentTimeMSK = new Date(now + mskOffset);
+
+        return currentTimeMSK;
+    }
+
+    function getDateMidnightMSK(){
         const mskOffset = getMSKOffset();
         const now = Date.now();
         const currentTimeMSK = new Date(now + mskOffset);
 
         const midnightMSK = new Date(currentTimeMSK);
         midnightMSK.setUTCHours(21, 0, 0, 0); // 21 corresponds to 00:00 MSK because MSK is UTC+3
+
+        return midnightMSK;
+    }
+
+    function getTimeUntilMidnightMSK() {
+        const midnightMSK = getDateMidnightMSK();
+        const currentTimeMSK = getServerTime();
 
         const timeDifference = midnightMSK - currentTimeMSK;
 
@@ -422,38 +437,6 @@
         leechInfoElement.innerText = getFreeleechInfo();
     }
 
-    function getNextFreeleechDate() {
-        const mskOffset = getMSKOffset();
-
-        // Get the current date in MSK timezone
-        const currentDate = new Date(Date.now() + mskOffset * 60 * 1000);
-
-        // Get the current year and month
-        const currentYear = currentDate.getUTCFullYear();
-        const currentMonth = currentDate.getUTCMonth();
-
-        // Calculate the last day of the current month
-        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getUTCDate();
-
-        // Find the last Saturday of the month
-        let freeleechDate;
-        for (let day = lastDayOfMonth; day > 0; day--) {
-            const dayDate = new Date(currentYear, currentMonth, day);
-            if (dayDate.getUTCDay() === 6) { // Saturday
-                freeleechDate = dayDate;
-                break;
-            }
-        }
-
-        // Set the time to the start of the day
-        freeleechDate.setUTCHours(0, 0, 0, 0);
-
-        // Adjust for MSK timezone offset
-        freeleechDate.setUTCMinutes(freeleechDate.getUTCMinutes() - mskOffset);
-
-        return freeleechDate;
-    }
-
     function getMSKOffset() {
         const mskTimeZone = SERVER_TIMEZONE;
         const date = new Date();
@@ -461,40 +444,71 @@
         return date.getTimezoneOffset() * -1; // Convert to positive
     }
 
-    // Function to display information about the freeleech event
-    function getFreeleechInfo() {
+    function getLastSaturday(year, month) {
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        const dayOfWeek = lastDayOfMonth.getDay();
+        const daysUntilLastSaturday = (dayOfWeek + 1) % 7; // Adding 1 to convert Sunday (0) to 1
+        const lastSaturdayDate = lastDayOfMonth.getDate() - daysUntilLastSaturday;
+
+        return new Date(year, month, lastSaturdayDate);
+    }
+
+    function isToday(dateToCheck){
+        // Get today's date
+        const today = new Date();
+
+        // Compare the components of the dateToCheck with today's date
+        const isSameDate =
+              dateToCheck.getDate() === today.getDate() &&
+              dateToCheck.getMonth() === today.getMonth() &&
+              dateToCheck.getFullYear() === today.getFullYear();
+
+        // Return true if the dateToCheck is today, otherwise return false
+        return isSameDate;
+    }
+
+    // Return next freeleech date
+    function getNextFreeleechDate(){
         const now = new Date();
-        const mskOffset = getMSKOffset(); // MSK timezone offset in hours
-        const nextEventStart = getNextFreeleechDate();
-        const eventStart = new Date(nextEventStart);
-        eventStart.setUTCHours(eventStart.getUTCHours() + mskOffset);
-        const eventEnd = new Date(eventStart);
-        eventEnd.setUTCDate(eventEnd.getUTCDate() + 1);
-        const timeUntilEvent = nextEventStart - now;
+        let nextFreeleechDate = getLastSaturday(now.getFullYear(), now.getMonth(), 0);
 
-        let freeleechInfo = '';
-        if (now < eventStart) {
-            const daysUntilEvent = Math.floor(timeUntilEvent / (1000 * 60 * 60 * 24));
-            const hoursUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutesUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60)) / (1000 * 60));
-            const secondsUntilEvent = Math.floor((timeUntilEvent % (1000 * 60)) / 1000);
-
-            freeleechInfo = `Next freeleech event: (${daysUntilEvent}d ${hoursUntilEvent}h ${minutesUntilEvent}m ${secondsUntilEvent}s).`;
-        } else if (now < eventEnd) {
-            const eventDuration = eventEnd - eventStart;
-            const timeLeft = eventEnd - now;
-            const hoursLeft = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-            const secondsLeft = Math.floor((timeLeft % (1000 * 60)) / 1000);
-
-            freeleechInfo = `FREELEECH NOW!!! Time remaining: ${hoursLeft}h, ${minutesLeft}m, ${secondsLeft}s.)`;
-            console.debug(`The freeleech event is currently running.`);
-            console.debug(`Time remaining: ${hoursLeft} hours, ${minutesLeft} minutes, ${secondsLeft} seconds.`);
-        } else {
-            console.debug(`The last freeleech event has ended.`);
+        // If current month has already had freeleech, get next month's.
+        if(nextFreeleechDate < now && !isToday(nextFreeleechDate)){
+            nextFreeleechDate = getLastSaturday(now.getFullYear(), now.getMonth() + 1, 0);
         }
 
-        return freeleechInfo;
+        return nextFreeleechDate;
+    }
+
+    // Function to display information about the freeleech event
+    function getFreeleechInfo() {
+        const today = new Date();
+        const nextFreeleechDate = getNextFreeleechDate();
+        const freeleechStart = nextFreeleechDate;
+        const isFreeleechDay = isToday(nextFreeleechDate);
+
+        let timeUntilEvent = null;
+        if(isFreeleechDay){
+            // event = end of current freeleech period.
+            timeUntilEvent = getDateMidnightMSK() - today;
+        } else {
+            // event = start of next freeleech period.
+            timeUntilEvent = freeleechStart - today;
+        }
+
+        const daysUntilEvent = Math.floor(timeUntilEvent / (1000 * 60 * 60 * 24));
+        const hoursUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutesUntilEvent = Math.floor((timeUntilEvent % (1000 * 60 * 60)) / (1000 * 60));
+        const secondsUntilEvent = Math.floor((timeUntilEvent % (1000 * 60)) / 1000);
+        const timer = `(${daysUntilEvent}d ${hoursUntilEvent}h ${minutesUntilEvent}m ${secondsUntilEvent}s)`;
+
+        if(isFreeleechDay){
+            return (`Freeleech day! Time left: ${timer}`);
+        }
+
+        return `Next freeleech event: ${timer} @ ${nextFreeleechDate}.`;
+
+
     }
 
     // DOM creation section
