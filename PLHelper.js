@@ -794,14 +794,6 @@
         GM_setValue(TORRENT_STORAGE_KEY, downloadedTorrents);
     }
 
-    function getDataForExport() {
-        const data = {
-            downloadedTorrents: getAllDownloadedTorrents(),
-            preferences: getProfilePreferences(),
-        };
-        return data;
-    }
-
     function getCurrentDateTimeString() {
         const now = new Date();
         const year = now.getFullYear();
@@ -812,41 +804,6 @@
 
         const dateTimeString = `${year}${month}${day}${hour}${minutes}`;
         return dateTimeString;
-    }
-
-    // Handles "export" event.
-    function initiateExport() {
-        const jsonStr = JSON.stringify(getDataForExport());
-        const blob = new Blob([jsonStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-
-        const downloadLink = document.createElement("a");
-        downloadLink.href = url;
-        downloadLink.download = `data${getCurrentDateTimeString()}.json`;
-        downloadLink.click();
-
-        URL.revokeObjectURL(url);
-        downloadLink.remove();
-    }
-
-    function initiateImport() {
-        const confirmImport = confirm("Importing will override all current data. Torrent downloads might not be accurate when overriding with older data.");
-        if (!confirmImport) {
-            return;
-        }
-        const userInput = window.prompt("Enter export data here:");
-
-        if (userInput !== null) {
-            console.debug("Starting import");
-            const importData = JSON.parse(userInput);
-
-            const torrentData = importData.downloadedTorrents;
-            GM_setValue(TORRENT_STORAGE_KEY, torrentData);
-
-            location.reload();
-        } else {
-            console.debug("No input provided. Import aborted.");
-        }
     }
 
     // Main (init) section.
@@ -898,11 +855,7 @@
             lastElement.insertAdjacentElement('afterend', downloadedStatsTr);
             lastElement.insertAdjacentElement('afterend', ratioPredictionTr);
 
-            const downloadDataButton = generateButton('bold clickable', `Download user data.`, initiateExport);
-            const importDataButton = generateButton('bold clickable', `Import user data.`, initiateImport);
             const resetDataButton = generateButton('bold clickable leech', `Reset to default.`, resetAllData);
-            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', downloadDataButton);
-            usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', importDataButton);
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', resetDataButton);
 
 
