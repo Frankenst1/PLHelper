@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.4
+// @version      0.4.5
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -194,6 +194,20 @@
         return nearestRatio;
     }
 
+    function getPreference(key){
+        const preferences = getProfilePreferences();
+        if(preferences.hasOwnProperty(key)){
+            return preferences[key];
+        }
+
+        return undefined;
+    }
+
+    function setPreference(key, value){
+        const preferences = getProfilePreferences();
+        preferences[key] = value;
+    }
+
     function calculateRequiredUploadRatio(down, up, ratio) {
         const currentRatio = up / down;
 
@@ -213,7 +227,12 @@
             const torrentLink = torrentLinkEl?.href;
             const torrentId = getIdFromUrl(torrentLink, 'torrent');
             if (isTorrentAlreadyDownloaded(torrentId)) {
-                torrentLinkEl?.setAttribute('style', 'color:green;');
+                if(getPreference('hideDownloadedTorrents') ?? false){
+                    row?.setAttribute('style', 'display:none');
+                } else {
+                    torrentLinkEl?.setAttribute('style', 'color:green;');
+
+                }
             }
         });
     }
@@ -313,6 +332,13 @@
                 const torrentSize = row.querySelector('td:nth-of-type(6) a').innerText;
 
                 const torrent = new Torrent(torrentId, torrentTitle, pageUrl, torrentSize);
+                if(getPreference('hideDownloadedTorrents') ?? false){
+                    if(!isTorrentAlreadyDownloaded(torrentId)){
+                        matchedTorrents['Pictures'].push(torrent);
+                    }
+                } else {
+                    matchedTorrents['Pictures'].push(torrent);
+                }
                 matchedTorrents['Pictures'].push(torrent);
             }
         });
@@ -344,13 +370,12 @@
 
                 const torrent = new Torrent(id, subject, url, size, topic);
 
-                const hideDownloadedTorrents = getProfilePreferences()?.hideDownloadedTorrents ?? false;
-                const isAlreadyDownloaded = isTorrentAlreadyDownloaded(id);
-
-                // NOT & HIDE = true & false -> false
-                if(hideDownloadedTorrents){
-                    if(!isAlreadyDownloaded){
+                if(getPreference('hideDownloadedTorrents') ?? false){
+                    if(!isTorrentAlreadyDownloaded(id)){
                         return torrent;
+                    } else {
+                        console.log("hide torrent:", torrent);
+                        return undefined;
                     }
                 } else {
                     return torrent;
@@ -359,6 +384,8 @@
 
             filteredTorrentsByString[searchString] = filteredTorrents;
         });
+
+        console.log(filteredTorrentsByString);
 
 
         return filteredTorrentsByString;
@@ -507,8 +534,6 @@
         }
 
         return `Next freeleech event: ${timer} @ ${nextFreeleechDate}.`;
-
-
     }
 
     // DOM creation section
@@ -859,10 +884,11 @@
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', resetDataButton);
 
 
-            const preferences = getProfilePreferences();
-            const hideDownloadedTorrents = preferences?.hideDownloadedTorrents ?? false;
+            const hideDownloadedTorrents = getPreference('hideDownloadedTorrents') ?? false;
             const toggleContainer = document.getElementById("toggleContainer"); // Replace with your container element ID
             const skipDownloadedToggle = generateToggle("Hide already downloaded torrents.", hideDownloadedTorrents, (checked) => {
+                const preferences = getProfilePreferences();
+                setPreference('hideDownloadedTorrents');
                 preferences.hideDownloadedTorrents = checked;
                 setProfilePreferences(preferences);
             });
@@ -878,6 +904,10 @@
             const pictureTorrentMatches = getAllPicturePacks();
             const torrentMatches = { ...searchTorrentMatches, ...pictureTorrentMatches };
             torrentMatches.all = Object.values(torrentMatches).flat();
+
+            console.log(searchTorrentMatches, pictureTorrentMatches);
+            console.log(pictureTorrentMatches);
+            console.log(torrentMatches.all);
 
             markDownloadedTorrents();
 
