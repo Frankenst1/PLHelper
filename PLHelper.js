@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.4.6
+// @version      0.5.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -24,10 +24,11 @@
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const TORRENT_STORAGE_KEY = 'downloadedTorrents';
     const PROFILE_PREFERENCES_KEY = 'profile_preferences';
+    const AVAILABLE_TOPICS = 'availableTopics';
     const SERVER_TIMEZONE = 'Europe/Moscow';
 
     // TODO: move these constants to a "profile settings" page.
-    const PREFERRED_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
+    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
     const SKIP_DOWNLOADED = true;
     const URL_DELAY = 1000;
 
@@ -56,8 +57,9 @@
     }
 
     class ProfilePreferences {
-        constructor(hideDownloadedTorrents) {
+        constructor(hideDownloadedTorrents = [], videoFormats = []) {
             this.hideDownloadedTorrents = hideDownloadedTorrents;
+            this.videoFormats = videoFormats
         }
     }
 
@@ -317,33 +319,86 @@
         }
     }
 
-    // TODO: rework (see getAllDownloadLinksWithString) Or better yet, re use it to fetch based on torrentType after altering / extending the functionality).
-    function getAllPicturePacks() {
+    function getAllTorrents(){
         const torrentRows = document.querySelectorAll('#tor-tbl tr.tCenter');
-        const matchedTorrents = { Pictures: [] };
+        const allTorrents = Array.from(torrentRows).map(mapRowToTorrent).filter((value) => value !== undefined);
 
-        torrentRows.forEach((row) => {
-            const torrentType = row.querySelector('td:nth-of-type(1) a').innerText;
+        return allTorrents;
+    }
 
-            if (torrentType.includes('Picture')) {
-                const torrentId = row.querySelector('td:nth-of-type(4) a').getAttribute('href').replace('./', '').replace('viewtopic.php?t=', '');
-                const torrentTitle = row.querySelector('td:nth-of-type(4) a').innerText;
-                const pageUrl = new URL(row.querySelector('td:nth-of-type(4) a').getAttribute('href'), document.baseURI).href;
-                const torrentSize = row.querySelector('td:nth-of-type(6) a').innerText;
+    function getAllTopics(){
+        const topicOptions = document.querySelectorAll('select#fs-main option');
+        const topics = [];
+        Array.from(topicOptions).map((option) => {
+            const topicId = option.getAttribute('value');
+            const topicTitle = option.innerText.replace(/^\|-\s*/, '');
 
-                const torrent = new Torrent(torrentId, torrentTitle, pageUrl, torrentSize);
-                if(getPreference('hideDownloadedTorrents') ?? false){
-                    if(!isTorrentAlreadyDownloaded(torrentId)){
-                        matchedTorrents['Pictures'].push(torrent);
-                    }
-                } else {
-                    matchedTorrents['Pictures'].push(torrent);
-                }
-                matchedTorrents['Pictures'].push(torrent);
-            }
+            const topic = new TorrentTopic(topicId, topicTitle, '#');
+            topics.push(topic);
         });
 
-        return matchedTorrents;
+        return topics;
+    }
+
+    function filterTopics(topic, wordsToCheck){
+        const topicToCheck = topic.title.toLowerCase();
+        return wordsToCheck.some(word => topicToCheck.includes(word.toLowerCase()));
+    }
+
+    // Basically we are fetching based on Topic titles.
+    function getPictureTorrents() {
+        const torrents = getAllTorrents();
+        const allowedTopics = ["MetArt", "Picture", "Misc", "Magazines", "Photo", "Hentai: main subsection", "Manga", "Art", "HCG", "Cartoons", "Comics"];
+        const topicIds = getAllTopics().filter((topic) => filterTopics(topic, allowedTopics)).map((topic) => topic.id);
+
+        if(topicIds.length == 0)
+        {
+            return [];
+        }
+
+        const pattern = new RegExp(`^(${topicIds.join('|')})`);
+        return torrents.filter((torrent) => {
+            const topicId = torrent.topic?.id;
+
+            console.log(pattern.test(topicId));
+
+            return pattern.test(topicId);
+        });
+    }
+
+    function getAllDownloadLinks(){
+        const torrentRows = document.querySelectorAll('#tor-tbl tr.tCenter');
+        const downloadedtorrents = getAllDownloadedTorrents();
+
+        torrentRows.forEach((row) => {
+            console.log(row);
+        });
+    }
+
+    function mapRowToTorrent(torrentRow){
+        const topicElement = torrentRow.querySelector('td:nth-of-type(3)');
+        const topicUrl = topicElement.querySelector('a')?.href;
+        const topicId = getIdFromUrl(topicUrl, 'topic');
+        const topicTitle = topicElement.textContent?.trim();
+        const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
+
+        const subjectElement = torrentRow.querySelector('td:nth-of-type(4)');
+        const subject = subjectElement.textContent?.trim();
+        const url = subjectElement.querySelector('a')?.href;
+        const size = torrentRow.querySelector('td:nth-of-type(6)').textContent?.trim();
+        const id = url.split('?t=').pop();
+
+        const torrent = new Torrent(id, subject, url, size, topic);
+
+        if(getPreference('hideDownloadedTorrents') ?? false){
+            if(!isTorrentAlreadyDownloaded(id)){
+                return torrent;
+            } else {
+                return undefined;
+            }
+        } else {
+            return torrent;
+        }
     }
 
     function getAllDownloadLinksWithString(searchStrings = []) {
@@ -355,32 +410,7 @@
         searchStrings.forEach(searchString => {
             const filteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes(searchString));
 
-            const filteredTorrents = filteredTorrentRows.map(row => {
-                const topicElement = row.querySelector('td:nth-of-type(3)');
-                const topicUrl = topicElement.querySelector('a')?.href;
-                const topicId = getIdFromUrl(topicUrl, 'topic');
-                const topicTitle = topicElement.textContent?.trim();
-                const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
-
-                const subjectElement = row.querySelector('td:nth-of-type(4)');
-                const subject = subjectElement.textContent?.trim();
-                const url = subjectElement.querySelector('a')?.href;
-                const size = row.querySelector('td:nth-of-type(6)').textContent?.trim();
-                const id = url.split('?t=').pop();
-
-                const torrent = new Torrent(id, subject, url, size, topic);
-
-                if(getPreference('hideDownloadedTorrents') ?? false){
-                    if(!isTorrentAlreadyDownloaded(id)){
-                        return torrent;
-                    } else {
-                        console.log("hide torrent:", torrent);
-                        return undefined;
-                    }
-                } else {
-                    return torrent;
-                }
-            }).filter((value) => value !== undefined);
+            const filteredTorrents = filteredTorrentRows.map(mapRowToTorrent).filter((value) => value !== undefined);
 
             filteredTorrentsByString[searchString] = filteredTorrents;
         });
@@ -900,14 +930,11 @@
         }
 
         if (checkPage('tracker_page')) {
-            const searchTorrentMatches = getAllDownloadLinksWithString(PREFERRED_VIDEO_FORMATS);
-            const pictureTorrentMatches = getAllPicturePacks();
-            const torrentMatches = { ...searchTorrentMatches, ...pictureTorrentMatches };
+            const searchTorrentMatches = getAllDownloadLinksWithString(AVAILABLE_VIDEO_FORMATS);
+            const pictureTorrentMatches = { 'Pictures': getPictureTorrents() };
+            console.log("picture torrents", pictureTorrentMatches);
+            const torrentMatches = { ...searchTorrentMatches, Pictures: [...getPictureTorrents()] };
             torrentMatches.all = Object.values(torrentMatches).flat();
-
-            console.log(searchTorrentMatches, pictureTorrentMatches);
-            console.log(pictureTorrentMatches);
-            console.log(torrentMatches.all);
 
             markDownloadedTorrents();
 
