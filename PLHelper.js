@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.5.0
+// @version      0.6.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -24,7 +24,6 @@
     const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const TORRENT_STORAGE_KEY = 'downloadedTorrents';
     const PROFILE_PREFERENCES_KEY = 'profile_preferences';
-    const AVAILABLE_TOPICS = 'availableTopics';
     const SERVER_TIMEZONE = 'Europe/Moscow';
 
     // TODO: move these constants to a "profile settings" page.
@@ -208,6 +207,8 @@
     function setPreference(key, value){
         const preferences = getProfilePreferences();
         preferences[key] = value;
+
+
     }
 
     function calculateRequiredUploadRatio(down, up, ratio) {
@@ -360,8 +361,6 @@
         return torrents.filter((torrent) => {
             const topicId = torrent.topic?.id;
 
-            console.log(pattern.test(topicId));
-
             return pattern.test(topicId);
         });
     }
@@ -370,9 +369,7 @@
         const torrentRows = document.querySelectorAll('#tor-tbl tr.tCenter');
         const downloadedtorrents = getAllDownloadedTorrents();
 
-        torrentRows.forEach((row) => {
-            console.log(row);
-        });
+        return Array.from(torrentRows).map(mapRowToTorrent).filter((value) => value !== undefined && value);
     }
 
     function mapRowToTorrent(torrentRow){
@@ -394,11 +391,13 @@
             if(!isTorrentAlreadyDownloaded(id)){
                 return torrent;
             } else {
-                return undefined;
+                console.log("already downl", id);
             }
         } else {
             return torrent;
         }
+
+        return false;
     }
 
     function getAllDownloadLinksWithString(searchStrings = []) {
@@ -914,15 +913,44 @@
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', resetDataButton);
 
 
+            // Torrent preferences profile section.
             const hideDownloadedTorrents = getPreference('hideDownloadedTorrents') ?? false;
-            const toggleContainer = document.getElementById("toggleContainer"); // Replace with your container element ID
+            const toggleContainer = document.getElementById("toggleContainer");
             const skipDownloadedToggle = generateToggle("Hide already downloaded torrents.", hideDownloadedTorrents, (checked) => {
+
                 const preferences = getProfilePreferences();
-                setPreference('hideDownloadedTorrents');
                 preferences.hideDownloadedTorrents = checked;
                 setProfilePreferences(preferences);
+                console.log(getProfilePreferences());
             });
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', skipDownloadedToggle);
+
+            //PPK_PREFERRED_VIDEO_FORMATS
+            const preferredVideoFormats = getPreference('videoFormats') ?? [];
+            console.log(preferredVideoFormats);
+            AVAILABLE_VIDEO_FORMATS.forEach((format) => {
+                const preferences = getProfilePreferences();
+                preferences.videoFormats = [];
+                setProfilePreferences(preferences);
+
+                const videoFormatToggle = generateToggle(`Video format ${format}`, preferredVideoFormats.indexOf(format) !== -1, (checked) => {
+                    if(checked){
+                        preferredVideoFormats.push(format);
+                    }
+                    else{
+                        const index = preferredVideoFormats.indexOf(format);
+                        if(index !== -1){
+                            preferredVideoFormats.splice(index, 1)
+                        }
+                    }
+
+                    const preferences = getProfilePreferences();
+                    preferences.videoFormats = preferredVideoFormats;
+                    setProfilePreferences(preferences);
+                });
+
+                usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', videoFormatToggle);
+            });
         }
 
         if (checkPage('torrent_page')) {
@@ -930,11 +958,14 @@
         }
 
         if (checkPage('tracker_page')) {
-            const searchTorrentMatches = getAllDownloadLinksWithString(AVAILABLE_VIDEO_FORMATS);
+            const searchTorrentMatches = getAllDownloadLinksWithString(getPreference('videoFormats'));
             const pictureTorrentMatches = { 'Pictures': getPictureTorrents() };
             console.log("picture torrents", pictureTorrentMatches);
             const torrentMatches = { ...searchTorrentMatches, Pictures: [...getPictureTorrents()] };
-            torrentMatches.all = Object.values(torrentMatches).flat();
+            torrentMatches.bulk = Object.values(torrentMatches).flat();
+
+            torrentMatches.all = getAllDownloadLinks();
+            console.log(torrentMatches.all);
 
             markDownloadedTorrents();
 
