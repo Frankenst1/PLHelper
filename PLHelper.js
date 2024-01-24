@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.7.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -710,6 +710,7 @@
     }
 
     function generateArrayOfDownloadButtons(torrents) {
+        console.log("generating btns", torrents);
         const downloadButtons = [];
 
         // TODO: move to different method!
@@ -1023,19 +1024,38 @@
 
                 filteredTorrentsByVideoFormatPrefs[videoFormat] = filteredTorrents;
             });
-            console.log(filteredTorrentsByVideoFormatPrefs);
-
             // Get all "picture" stuff.
 
             // Get EVERYTHING.
             const allTorrents = Array.from(torrentRows).map(mapTopicToTorrent).filter((value) => value !== undefined);
 
             // TODO: add "other" which contains all otrrents that are not included in any group (except for 'all').
-            const torrents = { Video: [...prefVideoFormats], All: [...allTorrents] };
-            console.log("tors", torrents);
+            const torrents = { Video: filteredTorrentsByVideoFormatPrefs, All: [...allTorrents] };
 
-            // Mark downloaded torrents as downloaded:
+            // Add download buttons on the form page.
+            // Fetch the buttons to be rendered.
+            const videoFormatButtons = generateArrayOfDownloadButtons({...torrents.Video});
+            const allButton = generateArrayOfDownloadButtons({All: torrents.All});
+            const downloadButtons = [...videoFormatButtons, allButton[0]];
+            const dnwldButtonWrapper = document.createElement('div');
+            downloadButtons.forEach((button) => {
+                dnwldButtonWrapper.appendChild(button);
+            });
 
+            // Create the progress bar to match the progress of the tab opener, but hide it until it's needed.
+            const progressBar = generateProgressBar(0, 'torrent-open-tab-progress-bar');
+            progressBar.style.display = 'none';
+
+            // Create markup and render the buttons for download groups.
+            const searchTableSectionBody = document.querySelector("#main_content_wrap > table:nth-child(6)");
+            const buttonsLegendTr = document.createElement('tr');
+            const buttonsLegend = generateLegend("Multi tab opener");
+            buttonsLegend.setAttribute('colspan', '3');
+            buttonsLegend.querySelector('div').appendChild(dnwldButtonWrapper);
+            buttonsLegend.querySelector('div').appendChild(progressBar);
+
+            buttonsLegendTr.appendChild(buttonsLegend);
+            searchTableSectionBody.appendChild(buttonsLegendTr);
         }
 
         if (checkPage('tracker_page')) {
