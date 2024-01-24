@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.7.1
+// @version      0.7.2
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -458,6 +458,10 @@
 
 
         return filteredTorrentsByString;
+    }
+
+    function filterEmptyOrFalseTorrent(array){
+        return array.filter(value => value !== false && value !== undefined && value !== null);
     }
 
     function getAllDownloadedTorrents() {
@@ -1020,7 +1024,7 @@
             const filteredTorrentsByVideoFormatPrefs = {};
             prefVideoFormats.forEach(videoFormat => {
                 const filteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes(videoFormat));
-                const filteredTorrents = filteredTorrentRows.map(mapTopicToTorrent).filter((value) => value !== undefined);
+                const filteredTorrents = filterEmptyOrFalseTorrent(filteredTorrentRows.map(mapTopicToTorrent));
 
                 filteredTorrentsByVideoFormatPrefs[videoFormat] = filteredTorrents;
             });
@@ -1028,10 +1032,10 @@
 
             // Get all "non cen"
             const uncenFilteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes('uncen') || !row.textContent.includes('ptcen'));
-            const uncenFilteredTorrents = uncenFilteredTorrentRows.map(mapTopicToTorrent).filter((value) => value !== undefined);
+            const uncenFilteredTorrents = filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapTopicToTorrent));
 
             // Get EVERYTHING.
-            const allTorrents = Array.from(torrentRows).map(mapTopicToTorrent).filter((value) => value !== undefined);
+            const allTorrents = filterEmptyOrFalseTorrent(Array.from(torrentRows).map(mapTopicToTorrent));
 
             // TODO: add "other" which contains all otrrents that are not included in any group (except for 'all').
             const torrents = { Video: filteredTorrentsByVideoFormatPrefs, Uncen: [...uncenFilteredTorrents], All: [...allTorrents] };
