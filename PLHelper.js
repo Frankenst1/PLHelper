@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.6.0
+// @version      0.6.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -27,7 +27,7 @@
     const SERVER_TIMEZONE = 'Europe/Moscow';
 
     // TODO: move these constants to a "profile settings" page.
-    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
+    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160", "uncen"];
     const SKIP_DOWNLOADED = true;
     const URL_DELAY = 1000;
 
@@ -313,8 +313,10 @@
                 return cp.includes('profile.php') && document.getElementById('passkey-val');
             case 'tracker_page':
                 return cp.includes('tracker.php');
-            case 'torrent_page':
+            case 'topic_page':
                 return cp.includes('viewtopic.php') && location.search.includes('?t=') && document.querySelector('.dl-link') !== null;
+            case 'form_page':
+                return cp.includes('viewforum.php');
             default:
                 return false;
         }
@@ -372,6 +374,43 @@
         return Array.from(torrentRows).map(mapRowToTorrent).filter((value) => value !== undefined && value);
     }
 
+    function mapTopicToTorrent(topicRow){
+        // Skip irrelevant rows, as they are not actually torrent rows.
+        if(topicRow.querySelector('.topic_id img').getAttribute('src').includes('folder_announce')){
+            return false;
+        }
+        const topicElement = document.querySelector('#main_content_wrap > table:nth-child(4) > tbody > tr:nth-child(1) > td:nth-child(1) > table > tbody > tr > td.nav.nav-top > a:last-of-type');
+        const topicUrl = topicElement.href;
+        const topicId = getIdFromUrl(topicUrl, 'topic');
+        const topicTitle = topicElement.textContent?.trim();
+        const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
+
+        const subjectElement = topicRow.querySelector('td:nth-of-type(2) > .torTopic > a');
+        const subject = subjectElement.textContent?.trim();
+        const url = subjectElement.href;
+        const size = topicRow.querySelector('td:nth-of-type(3) a.dl-stub')?.textContent?.trim();
+        const id = url.split('?t=').pop();
+
+        const torrent = new Torrent(id, subject, url, size, topic);
+
+        if(getPreference('hideDownloadedTorrents') ?? false){
+            if(!isTorrentAlreadyDownloaded(id)){
+                return torrent;
+            } else {
+                // Mark downloaded download depending on it's setting.
+                if(getPreference('hideDownloadedTorrents') ?? false){
+                    topicRow?.setAttribute('style', 'display:none');
+                } else {
+                    topicElement?.setAttribute('style', 'color:green;');
+                }
+            }
+        } else {
+            return torrent;
+        }
+
+        return false;
+    }
+
     function mapRowToTorrent(torrentRow){
         const topicElement = torrentRow.querySelector('td:nth-of-type(3)');
         const topicUrl = topicElement.querySelector('a')?.href;
@@ -382,6 +421,7 @@
         const subjectElement = torrentRow.querySelector('td:nth-of-type(4)');
         const subject = subjectElement.textContent?.trim();
         const url = subjectElement.querySelector('a')?.href;
+        console.log("tr", torrentRow);
         const size = torrentRow.querySelector('td:nth-of-type(6)').textContent?.trim();
         const id = url.split('?t=').pop();
 
@@ -820,6 +860,9 @@
         });
     }
 
+    function handleForumPosts(){
+    }
+
     function updateProgressBar(id, percentage) {
         const progressBar = document.getElementById(id);
 
@@ -925,9 +968,13 @@
             });
             usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', skipDownloadedToggle);
 
-            //PPK_PREFERRED_VIDEO_FORMATS
-            const preferredVideoFormats = getPreference('videoFormats') ?? [];
+            console.log(getPreference('videoFormats'));
+            const preferredVideoFormats = AVAILABLE_VIDEO_FORMATS;
+            const preferences = getProfilePreferences();
+            preferences.videoFormats = AVAILABLE_VIDEO_FORMATS;
+            setProfilePreferences(preferences);
             console.log(preferredVideoFormats);
+            /** DEBUG
             AVAILABLE_VIDEO_FORMATS.forEach((format) => {
                 const preferences = getProfilePreferences();
                 preferences.videoFormats = [];
@@ -936,9 +983,11 @@
                 const videoFormatToggle = generateToggle(`Video format ${format}`, preferredVideoFormats.indexOf(format) !== -1, (checked) => {
                     if(checked){
                         preferredVideoFormats.push(format);
+                        console.log("adding format", format);
                     }
                     else{
                         const index = preferredVideoFormats.indexOf(format);
+                        console.log("removing format", format);
                         if(index !== -1){
                             preferredVideoFormats.splice(index, 1)
                         }
@@ -951,21 +1000,51 @@
 
                 usersTable.querySelector('tr:last-of-type').insertAdjacentElement('afterend', videoFormatToggle);
             });
+            **/
         }
 
-        if (checkPage('torrent_page')) {
+        if (checkPage('topic_page')) {
             handleDownloadTorrent();
+        }
+
+        if (checkPage('form_page')) {
+            // TODO: get and map everything, then filter/assign to correct object instead of filtering/looping 3 times.
+
+            // Get all video stuff.
+            // TODO: Rework this to be used in tracker_page and maybe have some similar functions between the two. Apart from mapping/fetching tr's, they should be similar.
+            const torrentRows = document.querySelectorAll('#main_content table.forum tr[id]');
+            const downloadedtorrents = getAllDownloadedTorrents();
+            const prefVideoFormats = getPreference('videoFormats');
+
+            const filteredTorrentsByVideoFormatPrefs = {};
+            prefVideoFormats.forEach(videoFormat => {
+                const filteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes(videoFormat));
+                const filteredTorrents = filteredTorrentRows.map(mapTopicToTorrent).filter((value) => value !== undefined);
+
+                filteredTorrentsByVideoFormatPrefs[videoFormat] = filteredTorrents;
+            });
+            console.log(filteredTorrentsByVideoFormatPrefs);
+
+            // Get all "picture" stuff.
+
+            // Get EVERYTHING.
+            const allTorrents = Array.from(torrentRows).map(mapTopicToTorrent).filter((value) => value !== undefined);
+
+            // TODO: add "other" which contains all otrrents that are not included in any group (except for 'all').
+            const torrents = { Video: [...prefVideoFormats], All: [...allTorrents] };
+            console.log("tors", torrents);
+
+            // Mark downloaded torrents as downloaded:
+
         }
 
         if (checkPage('tracker_page')) {
             const searchTorrentMatches = getAllDownloadLinksWithString(getPreference('videoFormats'));
             const pictureTorrentMatches = { 'Pictures': getPictureTorrents() };
-            console.log("picture torrents", pictureTorrentMatches);
             const torrentMatches = { ...searchTorrentMatches, Pictures: [...getPictureTorrents()] };
             torrentMatches.bulk = Object.values(torrentMatches).flat();
 
             torrentMatches.all = getAllDownloadLinks();
-            console.log(torrentMatches.all);
 
             markDownloadedTorrents();
 
