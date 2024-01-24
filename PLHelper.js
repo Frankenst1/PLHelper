@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      0.7.0
+// @version      0.7.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -27,7 +27,7 @@
     const SERVER_TIMEZONE = 'Europe/Moscow';
 
     // TODO: move these constants to a "profile settings" page.
-    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160", "uncen"];
+    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
     const SKIP_DOWNLOADED = true;
     const URL_DELAY = 1000;
 
@@ -974,7 +974,7 @@
             const preferences = getProfilePreferences();
             preferences.videoFormats = AVAILABLE_VIDEO_FORMATS;
             setProfilePreferences(preferences);
-            console.log(preferredVideoFormats);
+            console.log("pref formats", preferredVideoFormats);
             /** DEBUG
             AVAILABLE_VIDEO_FORMATS.forEach((format) => {
                 const preferences = getProfilePreferences();
@@ -1026,17 +1026,23 @@
             });
             // Get all "picture" stuff.
 
+            // Get all "non cen"
+            const uncenFilteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes('uncen') || !row.textContent.includes('ptcen'));
+            const uncenFilteredTorrents = uncenFilteredTorrentRows.map(mapTopicToTorrent).filter((value) => value !== undefined);
+
             // Get EVERYTHING.
             const allTorrents = Array.from(torrentRows).map(mapTopicToTorrent).filter((value) => value !== undefined);
 
             // TODO: add "other" which contains all otrrents that are not included in any group (except for 'all').
-            const torrents = { Video: filteredTorrentsByVideoFormatPrefs, All: [...allTorrents] };
+            const torrents = { Video: filteredTorrentsByVideoFormatPrefs, Uncen: [...uncenFilteredTorrents], All: [...allTorrents] };
+            console.log("tors?", torrents);
 
             // Add download buttons on the form page.
             // Fetch the buttons to be rendered.
             const videoFormatButtons = generateArrayOfDownloadButtons({...torrents.Video});
+            const uncenButtons = generateArrayOfDownloadButtons({Uncensored: torrents.Uncen});
             const allButton = generateArrayOfDownloadButtons({All: torrents.All});
-            const downloadButtons = [...videoFormatButtons, allButton[0]];
+            const downloadButtons = [...videoFormatButtons, uncenButtons[0], allButton[0]];
             const dnwldButtonWrapper = document.createElement('div');
             downloadButtons.forEach((button) => {
                 dnwldButtonWrapper.appendChild(button);
