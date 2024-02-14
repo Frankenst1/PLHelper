@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.1.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -374,6 +374,47 @@
                 // Mark downloaded download depending on it's setting.
                 if (getPreference('hideDownloadedTorrents') ?? false) {
                     trackerRow?.setAttribute('style', 'display:none');
+                } else {
+                    topicElement?.setAttribute('style', 'color:green;');
+                }
+            }
+        } else {
+            return torrent;
+        }
+
+        return false;
+    }
+
+    function mapFormPostToTorrent(formRow) {
+        // Some form posts are ads or announcements, so no torrents. We skip those.
+        if (/(announce)/.test(formRow.querySelector('img.topic_icon')?.src)) {
+            return;
+        }
+
+        const topicElement = document.querySelector("#main_content_wrap > table:nth-child(4) > tbody > tr:nth-child(1) > td:nth-child(1) > table > tbody > tr > td.nav.nav-top > a:last-of-type")
+        const topicUrl = topicElement.href;
+        const topicId = getIdFromUrl(topicUrl, 'topic');
+        const topicTitle = topicElement.textContent?.trim();
+        const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
+
+        const subjectElement = formRow.querySelector('td:nth-of-type(2)');
+        const subject = subjectElement.textContent?.trim();
+        const url = subjectElement.querySelector('a').href;
+        const size = formRow.querySelector('td:nth-of-type(3) .dl-stub').textContent?.trim();
+        const id = url.split('?t=').pop();
+
+        // 3. Create a Torrent class object.
+        const torrent = new Torrent(id, subject, url, size, topic);
+        console.log("new torrent", torrent);
+
+        if (getPreference('hideDownloadedTorrents') ?? false) {
+            // TODO: might be a better idea to filter out when initially filtering?
+            if (!isTorrentAlreadyDownloaded(id)) {
+                return torrent;
+            } else {
+                // Mark downloaded download depending on it's setting.
+                if (getPreference('hideDownloadedTorrents') ?? false) {
+                    formRow?.setAttribute('style', 'display:none');
                 } else {
                     topicElement?.setAttribute('style', 'color:green;');
                 }
@@ -780,8 +821,8 @@
                     const lowercasedText = row.textContent.toLowerCase();
                     return lowercasedText.includes('uncen') || (!lowercasedText.includes('ptcen') && !lowercasedText.includes('cen'));
                 });
-                
-                return filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapFormPostToTorrent));
+
+                return filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapTrackerToTorrent));
             }
 
             function getAllRows(torrentRows) {
@@ -831,13 +872,14 @@
         }
 
         function addElements(torrents) {
+            // 1. Prepare everything.
             // Create the new legend with all new elements.
             const buttonsLegend = generateLegend("Torrent opener (tabs)");
             buttonsLegend.setAttribute('colspan', '3');
             const downloadButtonWrapper = document.createElement('div');
             const progressBarWrapper = document.createElement('div');
 
-            const downloadButtons = generateArrayOfDownloadButtons(torrents,);
+            const downloadButtons = generateArrayOfDownloadButtons(torrents);
             // Add button and progress bar to their respective wrapper.
             downloadButtons.forEach((downloadButton, index) => {
                 const button = downloadButton.button;
@@ -855,6 +897,7 @@
             buttonsLegend.querySelector('div').appendChild(downloadButtonWrapper);
             buttonsLegend.querySelector('div').appendChild(progressBarWrapper);
 
+            // 2. Add to the UI.
             // Get location and add the element legend there.
             const searchTableBody = document.querySelector("#tr-form > table > tbody > tr:nth-child(2) > td > table > tbody");
             const elementsRow = document.createElement('tr');
@@ -894,7 +937,8 @@
                 const nextRatioDept = formatBytes(calculateRequiredUploadRatio(stats.totalDown, stats.totalUp, nextRatio));
 
                 // TODO: Show time & update time display every second when next reset is.
-                ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. Next ratio: ${nextRatio} (${nextRatioDept} upload to go).`
+                ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. 
+                Next ratio: ${nextRatio} (${nextRatioDept} upload to go).`
                 userRatio.appendChild(ratioPredictionTr);
             }
 
@@ -1053,39 +1097,86 @@
     }
 
     function handleFormPage() {
-        alert("Not yet implemented!");
+        // 1. Get torrents from page.
+        const torrents = handleTorrentRows();
+        // 2. Add elements to UI.
+        addElements(torrents);
 
-        function oldUnrefactoredCode() {
-            // TODO: get and map everything, then filter/assign to correct object instead of filtering/looping 3 times.
-
-            // Get all video stuff.
-            // TODO: Rework this to be used in tracker_page and maybe have some similar functions between the two. Apart from mapping/fetching tr's, they should be similar.
+        // TODO: might be ideal to make a more generic method from this, as it's reused partially.
+        function handleTorrentRows() {
+            // 1. Get all torrent rows
             const torrentRows = document.querySelectorAll('#main_content table.forum tr[id]');
+            // 2. Get already downloaded torrents to potentially cross-check. (can be removed as this check happens on map.)
             const downloadedtorrents = getAllDownloadedTorrents();
-            const prefVideoFormats = getPreference('videoFormats');
+            // 3. Handle each "type".
+            function getAllVideoRows(torrentRows) {
+                // TODO: Get from preferences after preferences has been fully implemented.
+                const prefVideoFormats = AVAILABLE_VIDEO_FORMATS;
 
-            const filteredTorrentsByVideoFormatPrefs = {};
-            prefVideoFormats.forEach(videoFormat => {
-                const filteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes(videoFormat));
-                const filteredTorrents = filterEmptyOrFalseTorrent(filteredTorrentRows.map(mapTopicToTorrent));
+                const filteredTorrentsByVideoFormatPrefs = {};
+                prefVideoFormats.forEach(videoFormat => {
+                    const filteredTorrentRows = Array.from(torrentRows).filter(row => row.textContent.includes(videoFormat));
+                    const filteredTorrents = filterEmptyOrFalseTorrent(filteredTorrentRows.map(mapFormPostToTorrent));
 
-                filteredTorrentsByVideoFormatPrefs[videoFormat] = filteredTorrents;
-            });
-            // Get all "picture" stuff.
+                    filteredTorrentsByVideoFormatPrefs[videoFormat] = filteredTorrents;
+                });
 
-            // Get all "non cen"
-            const uncenFilteredTorrentRows = Array.from(torrentRows).filter(row => {
-                const lowercasedText = row.textContent.toLowerCase();
-                return lowercasedText.includes('uncen') || (!lowercasedText.includes('ptcen') && !lowercasedText.includes('cen'));
-            });
-            const uncenFilteredTorrents = filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapTopicToTorrent));
+                return filteredTorrentsByVideoFormatPrefs;
+            }
 
-            // Get EVERYTHING.
-            const allTorrents = filterEmptyOrFalseTorrent(Array.from(torrentRows).map(mapTopicToTorrent));
+            function getAllUncenRows(torrentRows) {
+                const uncenFilteredTorrentRows = Array.from(torrentRows).filter(row => {
+                    const lowercasedText = row.textContent.toLowerCase();
+                    return lowercasedText.includes('uncen') || (!lowercasedText.includes('ptcen') && !lowercasedText.includes('cen'));
+                });
+
+                return filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapFormPostToTorrent));
+            }
+
+            function getAllRows(torrentRows) {
+                return filterEmptyOrFalseTorrent(Array.from(torrentRows).map(mapFormPostToTorrent));
+            }
 
             // TODO: add "other" which contains all torrent that are not included in any group (except for 'all').
-            const torrents = { Video: filteredTorrentsByVideoFormatPrefs, Uncen: [...uncenFilteredTorrents], All: [...allTorrents] };
-            console.log("tors?", torrents);
+            return {
+                Video: getAllVideoRows(torrentRows),
+                Uncen: [...getAllUncenRows(torrentRows)],
+                All: [...getAllRows(torrentRows)]
+            };
+        }
+
+        function addElements(torrents) {
+            // 1. Prepare everything.
+            // Create the new legend with all new elements.
+            const buttonsLegend = generateLegend("Torrent opener (tabs)");
+            buttonsLegend.setAttribute('colspan', '3');
+            const downloadButtonWrapper = document.createElement('div');
+            const progressBarWrapper = document.createElement('div');
+
+            const downloadButtons = generateArrayOfDownloadButtons(torrents);
+            // Add button and progress bar to their respective wrapper.
+            downloadButtons.forEach((downloadButton, index) => {
+                const button = downloadButton.button;
+                const progressBar = downloadButton.progressBar;
+                progressBar.style.display = 'none';
+                if (index > 0) {
+                    button.style.marginLeft = '10px';
+                    progressBar.marginTop = '10px';
+                }
+                // Add button to wrapper
+                downloadButtonWrapper.appendChild(button);
+                progressBarWrapper.appendChild(progressBar);
+            });
+            // Add wrappers to the buttons legend.
+            buttonsLegend.querySelector('div').appendChild(downloadButtonWrapper);
+            buttonsLegend.querySelector('div').appendChild(progressBarWrapper);
+
+            // 2. Add to the UI.
+            // Get location and add the element legend there.
+            const searchTableBody = document.querySelector("#main_content_wrap > table:nth-child(6) > tbody")
+            const elementsRow = document.createElement('tr');
+            elementsRow.appendChild(buttonsLegend);
+            searchTableBody.appendChild(elementsRow);
         }
     }
     // ==/Handler methods==
