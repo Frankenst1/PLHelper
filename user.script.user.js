@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -373,7 +373,7 @@
             } else {
                 // Mark downloaded download depending on it's setting.
                 if (getPreference('hideDownloadedTorrents') ?? false) {
-                    topicRow?.setAttribute('style', 'display:none');
+                    trackerRow?.setAttribute('style', 'display:none');
                 } else {
                     topicElement?.setAttribute('style', 'color:green;');
                 }
@@ -388,11 +388,21 @@
 
     // ==DOM methods==
     function generateArrayOfDownloadButtons(torrents, elementsId = 'torrent-open-tab') {
-        console.log(torrents);
         const downloadButtons = [];
+        console.log(torrents);
 
         // TODO: move to different method! + rework for readability.
         Object.keys(torrents).forEach((key, index) => {
+            if (
+                typeof torrents[key] === 'object' &&
+                !Array.isArray(torrents[key]) &&
+                torrents[key] !== null
+            ) {
+                const nested = generateArrayOfDownloadButtons(torrents[key], `torrent-open-tab-group-${key}`);
+                downloadButtons.push(...nested);
+
+                return;
+            }
             const filter = key;
             const length = torrents[filter]?.length ?? 0;
             const eta = new Date(Date.now() + (length * URL_DELAY)).toLocaleString();
@@ -827,7 +837,7 @@
             const downloadButtonWrapper = document.createElement('div');
             const progressBarWrapper = document.createElement('div');
 
-            const downloadButtons = generateArrayOfDownloadButtons(torrents);
+            const downloadButtons = generateArrayOfDownloadButtons(torrents,);
             // Add button and progress bar to their respective wrapper.
             downloadButtons.forEach((downloadButton, index) => {
                 const button = downloadButton.button;
