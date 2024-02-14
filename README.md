@@ -1,4 +1,4 @@
-# PLHelper
+# PLHelper [![Lint](https://github.com/Frankenst1/PLHelper/actions/workflows/lint.yml/badge.svg)](https://github.com/Frankenst1/PLHelper/actions/workflows/lint.yml)
 ## Installation instructions
 
 a) Install browser addon TamperMonkey, Greasemonkey or Violentmonkey.  
