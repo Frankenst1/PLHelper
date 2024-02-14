@@ -1215,7 +1215,6 @@
     function migrateStorage() {
         // Check if data is present in one of the old keys.
         const TORRENT_STORAGE_KEY = 'downloadedTorrents';
-        const PROFILE_PREFERENCES_KEY = 'profile_preferences';
 
         if (GM_getValue(TORRENT_STORAGE_KEY)) {
             let profile = getProfile();
