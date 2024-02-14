@@ -787,9 +787,7 @@
         function handleTorrentRows() {
             // 1. Get all torrent rows
             const torrentRows = document.querySelectorAll('#main_content table#tor-tbl tr.tCenter');
-            // 2. Get already downloaded torrents to potentially cross-check. (can be removed as this check happens on map.)
-            const downloadedtorrents = getAllDownloadedTorrents();
-            // 3. Handle each "type". (TODO: this method should be globally available).
+            // 2. Handle each "type". (TODO: this method should be globally available).
             function getAllVideoRows(torrentRows) {
                 // TODO: Get from preferences after preferences has been fully implemented.
                 const prefVideoFormats = AVAILABLE_VIDEO_FORMATS;
@@ -936,10 +934,16 @@
                 const stats = getTorrentStatsFromProfilePage();
                 const nextRatioDept = formatBytes(calculateRequiredUploadRatio(stats.totalDown, stats.totalUp, nextRatio));
 
-                // TODO: Show time & update time display every second when next reset is.
                 ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. 
-                Next ratio: ${nextRatio} (${nextRatioDept} upload to go).`
+                Next ratio: ${nextRatio} (${nextRatioDept} upload to go).
+                Next server reset ${calculateTimeUntilServerReset()}`
                 userRatio.appendChild(ratioPredictionTr);
+                setInterval(updateTimer, 1000);
+                function updateTimer() {
+                    ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. 
+                Next ratio: ${nextRatio} (${nextRatioDept} upload to go).
+                Next server reset ${calculateTimeUntilServerReset()}`
+                }
             }
 
             // TODO: move parts of this to a generic one, so it can be reused on other pages.
@@ -1106,9 +1110,7 @@
         function handleTorrentRows() {
             // 1. Get all torrent rows
             const torrentRows = document.querySelectorAll('#main_content table.forum tr[id]');
-            // 2. Get already downloaded torrents to potentially cross-check. (can be removed as this check happens on map.)
-            const downloadedtorrents = getAllDownloadedTorrents();
-            // 3. Handle each "type".
+            // 2. Handle each "type".
             function getAllVideoRows(torrentRows) {
                 // TODO: Get from preferences after preferences has been fully implemented.
                 const prefVideoFormats = AVAILABLE_VIDEO_FORMATS;
