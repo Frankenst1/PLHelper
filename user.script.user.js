@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         PLHelper reworked
+// @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
 // @version      1.0
@@ -19,6 +19,7 @@
 // TODO: add proper debugging.
 // TODO: add ability to start downloading the torrents as well?
 // TODO: move these constants to a "profile settings" page.
+// TODO: handleFormPage and handleTorrentPage have a very similar body. Might be a good idea to have it more abstract and reuse methods between the two for maintainability.
 (function () {
     'use strict';
 
@@ -735,12 +736,11 @@
         function handleTorrentRows() {
             // 1. Get all torrent rows
             const torrentRows = document.querySelectorAll('#main_content table#tor-tbl tr.tCenter');
-            // 2. Get already downloaded torrents to potentially cross-check.
+            // 2. Get already downloaded torrents to potentially cross-check. (can be removed as this check happens on map.)
             const downloadedtorrents = getAllDownloadedTorrents();
-            // 3. Hanlde each "type".
+            // 3. Handle each "type". (TODO: this method should be globally available).
             function getAllVideoRows(torrentRows) {
-                // TODO: enable this line when preferences have been implemented.
-                // const prefVideoFormats = getPreference('videoFormats');
+                // TODO: Get from preferences after preferences has been fully implemented.
                 const prefVideoFormats = AVAILABLE_VIDEO_FORMATS;
 
                 const filteredTorrentsByVideoFormatPrefs = {};
@@ -765,6 +765,15 @@
                 });
             }
 
+            function getAllUncenRows(torrentRows) {
+                const uncenFilteredTorrentRows = Array.from(torrentRows).filter(row => {
+                    const lowercasedText = row.textContent.toLowerCase();
+                    return lowercasedText.includes('uncen') || (!lowercasedText.includes('ptcen') && !lowercasedText.includes('cen'));
+                });
+                
+                return filterEmptyOrFalseTorrent(uncenFilteredTorrentRows.map(mapFormPostToTorrent));
+            }
+
             function getAllRows(torrentRows) {
                 return filterEmptyOrFalseTorrent(Array.from(torrentRows).map(mapTrackerToTorrent));
             }
@@ -773,6 +782,7 @@
             const torrents = {
                 Video: getAllVideoRows(torrentRows),
                 Pictures: [...getAllPictureRows(torrentRows)],
+                Uncen: [...getAllUncenRows(torrentRows)],
                 All: [...getAllRows(torrentRows)]
             };
 
@@ -1104,13 +1114,13 @@
         const TORRENT_STORAGE_KEY = 'downloadedTorrents';
         const PROFILE_PREFERENCES_KEY = 'profile_preferences';
 
-        if(GM_getValue(TORRENT_STORAGE_KEY)){
+        if (GM_getValue(TORRENT_STORAGE_KEY)) {
             let profile = getProfile();
             profile.downloadedTorrents = GM_getValue(TORRENT_STORAGE_KEY);
             updateProfile(profile);
             GM_deleteValue(TORRENT_STORAGE_KEY);
 
-            console.info("Old data has been migrated.")
+            console.info("Torrent storage has been migrated.")
         }
     }
     // ==/Main==
