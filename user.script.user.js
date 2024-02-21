@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.2.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -61,10 +61,12 @@
     }
 
     class Profile {
-        constructor(preferences = new ProfilePreferences(), ratio = 0, downloadedTorrents = []) {
+        constructor(preferences = new ProfilePreferences(), ratio = 0, uploaded = 0, downloaded = 0, downloadedTorrents = []) {
             this.preferences = preferences;
             this.ratio = {
                 ratio: ratio,
+                uploaded: uploaded,
+                downloaded: downloaded,
                 lastUpdated: Date()
             };
             this.downloadedTorrents = downloadedTorrents;
@@ -229,7 +231,20 @@
     function calculateRemainingDownloadQuota() {
         const nDownloaded = calculateDownloadedToday();
 
-        return getDownloadQuotaForProfile() - nDownloaded;
+        // Get accurate data and update it when we are on profile. Otherwise, use last known data (from profile storage).
+        let downloadQuota;
+        if (checkPage('profile_page')) {
+            downloadQuota = getDownloadQuotaForProfile();
+        } else {
+            const profile = getProfile();
+            const gbUploaded = convertSizeBetweenUnits(profile.ratio.uploaded, 'B', 'GB');
+            const gbDownloaded = convertSizeBetweenUnits(profile.ratio.downloaded, 'B', 'GB');
+
+            downloadQuota = calculateDownloadLimit(gbUploaded, gbDownloaded, profile.ratio.ratio)
+            console.log("quota", downloadQuota);
+        }
+
+        return downloadQuota - nDownloaded;
     }
 
     function calculateDownloadedToday() {
@@ -776,6 +791,22 @@
         }
     }
 
+    function showRemainingDownloads() {
+        const remainingQuota = calculateRemainingDownloadQuota();
+
+        const logo = document.getElementById('logo-td');
+        const downloadsRemainingElement = document.createElement('p');
+        downloadsRemainingElement.innerText = `Downloads remaining: ${remainingQuota}`;
+        logo.appendChild(downloadsRemainingElement);
+
+        downloadsRemainingElement.style.color = 'green';
+        if(remainingQuota < 10){
+            downloadsRemainingElement.style.color = 'orange';
+        } else if(remainingQuota <= 0){
+            downloadsRemainingElement.style.color = 'red';
+        }
+    }
+
     function handleTrackerPage() {
         // 1. Prepare all torrent data
         const torrents = handleTorrentRows();
@@ -906,12 +937,12 @@
 
     function handleProfilePage() {
         addElements();
+        updateProfileWithProfilePageData();
 
         function addElements() {
             addTorrentsTable();
             showRatioPredictions();
             showRemainingDownloads();
-            updateProfileWithProfileData();
 
             function addTorrentsTable() {
                 const contentWrap = document.querySelector('#main_content_wrap');
@@ -963,20 +994,8 @@
                 downloadStatsRow.appendChild(downloadStatsHeader);
                 downloadStatsRow.appendChild(downloadsRemainingData);
 
-                console.log(downloadStatsRow);
-                console.log(userTable);
                 userTable.appendChild(downloadStatsRow);
             }
-
-            function updateProfileWithProfileData() {
-                const profile = getProfile();
-                profile.ratio = {
-                    ratio: document.getElementById('u_ratio').innerText.trim(),
-                    lastUpdated: new Date()
-                }
-            }
-
-            // Generate user stats:
         }
 
         // Handler specific helper methods
@@ -1036,6 +1055,21 @@
                 'totalBonus': totalBonus,
                 'totalDown': totalDown,
             };
+        }
+
+        function updateProfileWithProfilePageData() {
+            // Get current profile to update with page data.
+            const profile = getProfile();
+            const torrentStats = getTorrentStatsFromProfilePage();
+
+            profile.ratio = {
+                ratio: document.querySelector('#u_ratio > b').innerText.trim(),
+                downloaded: torrentStats.totalDown,
+                uploaded: torrentStats.totalUp,
+                lastUpdated: Date()
+            }
+
+            updateProfile(profile);
         }
 
         function predictRatio() {
@@ -1210,8 +1244,10 @@
         }
         // Methods for all pages after this.
         showFreeleechCountdown();
+        showRemainingDownloads();
     }
 
+    // This function is used to migrate storage data from 0.x release to 1.x releases.
     function migrateStorage() {
         // Check if data is present in one of the old keys.
         const TORRENT_STORAGE_KEY = 'downloadedTorrents';
