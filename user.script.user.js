@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
+// @version      1.3.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -103,9 +103,9 @@
 
         // Compare the components of the dateToCheck with today's date
         const isSameDate =
-            dateToCheck.getDate() === today.getDate() &&
-            dateToCheck.getMonth() === today.getMonth() &&
-            dateToCheck.getFullYear() === today.getFullYear();
+              dateToCheck.getDate() === today.getDate() &&
+              dateToCheck.getMonth() === today.getMonth() &&
+              dateToCheck.getFullYear() === today.getFullYear();
 
         // Return true if the dateToCheck is today, otherwise return false
         return isSameDate;
@@ -887,11 +887,11 @@
             // TODO: might be a good idea to just manually fetch the IDs?
             const allowedTopics = ["MetArt", "Picture", "Misc", "Magazines", "Photo", "Hentai: main subsection", "Manga", "Art", "HCG", "Cartoons", "Comics"];
             const topicIds = getAllTopics()
-                .filter(topic => {
-                    const topicToCheck = topic.title.toLowerCase();
-                    return allowedTopics.some(word => topicToCheck.includes(word.toLowerCase()));
-                })
-                .map(topic => topic.id);
+            .filter(topic => {
+                const topicToCheck = topic.title.toLowerCase();
+                return allowedTopics.some(word => topicToCheck.includes(word.toLowerCase()));
+            })
+            .map(topic => topic.id);
 
             if (topicIds.length == 0) {
                 return [];
@@ -965,13 +965,13 @@
                 const stats = getTorrentStatsFromProfilePage();
                 const nextRatioDept = formatBytes(calculateRequiredUploadRatio(stats.totalDown, stats.totalUp, nextRatio));
 
-                ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. 
+                ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}.
                 Next ratio: ${nextRatio} (${nextRatioDept} upload to go).
                 Next server reset ${calculateTimeUntilServerReset()}`
                 userRatio.appendChild(ratioPredictionTr);
                 setInterval(updateTimer, 1000);
                 function updateTimer() {
-                    ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}. 
+                    ratioPredictionTr.innerText = `Ratio after reset: ${predictedRatio}.
                 Next ratio: ${nextRatio} (${nextRatioDept} upload to go).
                 Next server reset ${calculateTimeUntilServerReset()}`
                 }
@@ -1097,6 +1097,8 @@
             const topicTitle = topicElement.innerText;
             const torrentTopic = new TorrentTopic(topicId, topicTitle, topicUrl);
             const torrent = new Torrent(torrentId, torrentTitle, torrentUrl, torrentSize, torrentTopic);
+
+            document.querySelector('#page_container').style.backgroundColor = isTorrentAlreadyDownloaded(torrentId) ? 'red' : 'green';
 
             downloadTorrentBtn.addEventListener('click', (event) => {
                 hanldeDownloadTorrent(event, torrent);
