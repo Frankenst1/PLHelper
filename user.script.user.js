@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.3.0
+// @version      1.4.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -241,7 +241,6 @@
             const gbDownloaded = convertSizeBetweenUnits(profile.ratio.downloaded, 'B', 'GB');
 
             downloadQuota = calculateDownloadLimit(gbUploaded, gbDownloaded, profile.ratio.ratio)
-            console.log("quota", downloadQuota);
         }
 
         return downloadQuota - nDownloaded;
@@ -278,7 +277,7 @@
         }
     }
 
-    function calculateTimeUntilServerReset() {
+    function calculateTimeUntilServerReset(asObject = false) {
         const midnightMSK = getDateMidnightMSK();
         const currentTimeMSK = getServerTime();
 
@@ -311,6 +310,10 @@
         function getMSKOffset() {
             const date = new Date();
             return date.getTimezoneOffset() * -1; // Convert to positive
+        }
+
+        if(asObject){
+            return { hours: hours, minutes: minutes, seconds: seconds };
         }
 
         return `${hours} hours, ${minutes} minutes, ${seconds} seconds`;
@@ -420,7 +423,6 @@
 
         // 3. Create a Torrent class object.
         const torrent = new Torrent(id, subject, url, size, topic);
-        console.log("new torrent", torrent);
 
         if (getPreference('hideDownloadedTorrents') ?? false) {
             // TODO: might be a better idea to filter out when initially filtering?
@@ -445,7 +447,6 @@
     // ==DOM methods==
     function generateArrayOfDownloadButtons(torrents, elementsId = 'torrent-open-tab') {
         const downloadButtons = [];
-        console.log(torrents);
 
         // TODO: move to different method! + rework for readability.
         Object.keys(torrents).forEach((key, index) => {
@@ -796,7 +797,9 @@
 
         const logo = document.getElementById('logo-td');
         const downloadsRemainingElement = document.createElement('p');
+
         downloadsRemainingElement.innerText = `Downloads remaining: ${remainingQuota}`;
+
         logo.appendChild(downloadsRemainingElement);
 
         downloadsRemainingElement.style.color = 'green';
@@ -1226,6 +1229,32 @@
             console.debug("No profile is found. Assuming first run. Creating new profile.");
             const profile = new Profile();
             updateProfile(profile);
+        } else {
+            let timeUntilNextReset = calculateTimeUntilServerReset(true);
+
+            // Server reset interval (24 hours)
+            const resetIntervalSeconds = 24 * 60 * 60;
+
+            // Convert time until next reset to total seconds.
+            let secondsUntilNextReset =
+                (timeUntilNextReset.hours * 3600) +
+                (timeUntilNextReset.minutes * 60) +
+                timeUntilNextReset.seconds;
+
+            let lastResetTimeInSeconds = Math.floor(new Date().getTime() / 1000) - secondsUntilNextReset;
+
+            // Function to check if a given date is after the last reset
+            function isAfterLastReset(givenDate){
+                // Convert the given date to seconds since the epoch
+                let givenDateInSeconds = Math.floor(givenDate.getTime() / 1000);
+                return givenDateInSeconds > lastResetTimeInSeconds;
+            }
+
+            // When ratio data is too old, we need to update it.
+            if(!isAfterLastReset(new Date(getProfile()?.ratio.lastUpdated))){
+                const profileLink = document.querySelector("#page_header > div.topmenu > table > tbody > tr > td:nth-child(1) > a:nth-child(1)").href;
+                window.location.href = profileLink;
+            }
         }
 
         // Page specific script loading.
@@ -1248,23 +1277,7 @@
         showFreeleechCountdown();
         showRemainingDownloads();
     }
-
-    // This function is used to migrate storage data from 0.x release to 1.x releases.
-    function migrateStorage() {
-        // Check if data is present in one of the old keys.
-        const TORRENT_STORAGE_KEY = 'downloadedTorrents';
-
-        if (GM_getValue(TORRENT_STORAGE_KEY)) {
-            let profile = getProfile();
-            profile.downloadedTorrents = GM_getValue(TORRENT_STORAGE_KEY);
-            updateProfile(profile);
-            GM_deleteValue(TORRENT_STORAGE_KEY);
-
-            console.info("Torrent storage has been migrated.")
-        }
-    }
     // ==/Main==
 
-    migrateStorage();
     initializeScript();
 })();
