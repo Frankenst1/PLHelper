@@ -82,46 +82,47 @@
         }
     };
 
-        // ==Data Structures==
-        class Torrent {
-            constructor(id, title, pageUrl, size, topic, downloadDate = null) {
-                this.id = id;
-                this.title = title;
-                this.pageUrl = pageUrl;
-                this.size = size;
-                this.topic = topic;
-                this.downloadDate = downloadDate;
-            }
-    
-            isDownloaded(downloadedTorrents) {
-                return downloadedTorrents.some(torrent => torrent.id === this.id);
-            }
+    // ==Data Structures==
+    class Torrent {
+        constructor(id, title, pageUrl, size, topic, downloadDate = null) {
+            this.id = id;
+            this.title = title;
+            this.pageUrl = pageUrl;
+            this.size = size;
+            this.topic = topic;
+            this.downloadDate = downloadDate;
         }
-    
-        // TODO: Shouldn't page URL not always be generated?
-        class TorrentTopic {
-            constructor(id, title, pageUrl = null) {
-                this.id = id;
-                this.title = title;
-                this.pageUrl = pageUrl || `./forum/tracker.php?f=${id}`;
-            }
+
+        isDownloaded(downloadedTorrents) {
+            return downloadedTorrents.some(torrent => torrent.id === this.id);
         }
-    
-        class Profile {
-            constructor(preferences = {}, stats = { ratio: 0, uploaded: 0, downloaded: 0 }, downloadedTorrents = []) {
-                this.preferences = preferences;
-                this.stats = stats;
-                this.downloadedTorrents = downloadedTorrents;
-            }
-    
-            addDownloadedTorrent(torrent) {
-                this.downloadedTorrents.push(torrent);
-            }
-    
-            updateStats(stats) {
-                this.stats = { ...this.stats, ...stats };
-            }
-        }    
+    }
+
+    // TODO: Shouldn't page URL not always be generated?
+    class TorrentTopic {
+        constructor(id, title, pageUrl = null) {
+            this.id = id;
+            this.title = title;
+            this.pageUrl = pageUrl || `./forum/tracker.php?f=${id}`;
+        }
+    }
+
+    class Profile {
+        constructor(preferences = {}, stats = { ratio: 0, uploaded: 0, downloaded: 0 }, downloadedTorrents = []) {
+            this.preferences = preferences;
+            this.stats = stats;
+            this.downloadedTorrents = downloadedTorrents;
+        }
+
+        addDownloadedTorrent(torrent) {
+            this.downloadedTorrents.push(torrent);
+        }
+
+        updateStats(stats) {
+            this.stats = { ...this.stats, ...stats };
+        }
+    }
+
     // ==Storage Manager==
     const StorageManager = {
         get(key, defaultValue) {
