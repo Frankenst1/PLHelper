@@ -75,12 +75,29 @@
                     id = url.split('?t=').pop();
                     break;
                 default:
-                    Utils.logDebug(`Invalid URL type: ${type}`);
+                    this.logDebug(`Invalid URL type: ${type}`);
                     return null;
             }
             return id;
+        },
+
+        checkPage(page) {
+            const currentPath = location.pathname;
+            switch (page) {
+                case 'profile_page':
+                    return currentPath.includes('profile.php') && document.getElementById('passkey-val') !== null;
+                case 'tracker_page':
+                    return currentPath.includes('tracker.php');
+                case 'topic_page':
+                    return currentPath.includes('viewtopic.php') && location.search.includes('?t=') && document.querySelector('.dl-link') !== null;
+                case 'form_page':
+                    return currentPath.includes('viewforum.php');
+                default:
+                    return false;
+            }
         }
     };
+
 
     // ==Data Structures==
     class Torrent {
@@ -165,7 +182,6 @@
         }
     };
 
-    // ==Quota Manager==
     // ==Quota Manager==
     const QuotaManager = {
         calculateDailyQuota(profile) {
@@ -393,37 +409,6 @@
     // ==/CSS==
 
     // ==Helper methods==
-    // Returns "true" if on the correct page.
-    function checkPage(page) {
-        let cp = location.pathname;
-        switch (page) {
-            case 'profile_page':
-                return cp.includes('profile.php') && document.getElementById('passkey-val');
-            case 'tracker_page':
-                return cp.includes('tracker.php');
-            case 'topic_page':
-                return cp.includes('viewtopic.php') && location.search.includes('?t=') && document.querySelector('.dl-link') !== null;
-            case 'form_page':
-                return cp.includes('viewforum.php');
-            default:
-                return false;
-        }
-    }
-
-    function isToday(dateToCheck) {
-        // Get today's date
-        const today = new Date();
-
-        // Compare the components of the dateToCheck with today's date
-        const isSameDate =
-            dateToCheck.getDate() === today.getDate() &&
-            dateToCheck.getMonth() === today.getMonth() &&
-            dateToCheck.getFullYear() === today.getFullYear();
-
-        // Return true if the dateToCheck is today, otherwise return false
-        return isSameDate;
-    }
-
     function isTorrentAlreadyDownloaded(torrentId) {
         const downloadedTorrents = getAllDownloadedTorrents();
         return downloadedTorrents.some((obj) => obj.id == torrentId);
@@ -1346,21 +1331,20 @@
 
     // ==Main==
     function initializeScript() {
-        Utils.logDebug('Testing the initialize script...');
         const profile = StorageManager.loadProfile();
-
-        if (location.pathname.includes('profile.php')) {
+    
+        if (Utils.checkPage('profile_page')) {
             handleProfilePage(profile);
-        } else if (location.pathname.includes('tracker.php')) {
+        } else if (Utils.checkPage('tracker_page')) {
             handleTrackerPage(profile);
-        } else if (location.pathname.includes('viewtopic.php')) {
+        } else if (Utils.checkPage('topic_page')) {
             handleTorrentPage(profile);
-        } else if (location.pathname.includes('viewforum.php')) {
+        } else if (Utils.checkPage('form_page')) {
             handleFormPage(profile);
         }
-
+    
         StorageManager.saveProfile(profile);
-    }
+    }    
 
     initializeScript();
 })();
