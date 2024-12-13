@@ -283,6 +283,72 @@
         }
     };
 
+    // ==Page Handlers==
+    function handleProfilePage(profile) {
+        const wrapper = document.querySelector('#main_content_wrap');
+        if (!wrapper) return;
+
+        // Generate torrents table
+        const torrentsTable = UIHelpers.generateTorrentsTable(profile.downloadedTorrents);
+        wrapper.appendChild(torrentsTable);
+
+        // Generate stats panel
+        const statsPanel = UIHelpers.generateStatsPanel(profile);
+        wrapper.appendChild(statsPanel);
+
+        // Save any updates to the profile
+        StorageManager.saveProfile(profile);
+    }
+
+    function handleTrackerPage(profile) {
+        const rows = document.querySelectorAll('#main_content table#tor-tbl tr.tCenter');
+        const torrents = Array.from(rows)
+            .map(row => TorrentMapper.mapTrackerToTorrent(row, profile))
+            .filter(Boolean); // Remove nulls (filtered out torrents)
+
+        // Add torrent opener UI
+        UIHelpers.addTorrentOpenerUI(torrents);
+    }
+
+    function handleFormPage(profile) {
+        const rows = document.querySelectorAll('#main_content table.forum tr[id]');
+        const torrents = Array.from(rows)
+            .map(row => TorrentMapper.mapFormPostToTorrent(row, profile))
+            .filter(Boolean); // Remove nulls (filtered out torrents)
+
+        // Add torrent opener UI
+        UIHelpers.addTorrentOpenerUI(torrents);
+    }
+
+    function handleTorrentPage(profile) {
+        const torrentId = Utils.parseIdFromUrl(location.search, 'torrent');
+        const torrentTitle = document.querySelector('h1.maintitle')?.textContent?.trim();
+        const torrentUrl = location.href;
+        const torrentSize = document.querySelector('#main_content_wrap .dl_list tbody tr:nth-of-type(2) td b:nth-of-type(1)')?.textContent;
+
+        const topicElement = document.querySelector("#main_content_wrap .nav a:nth-last-of-type(2)");
+        const topicUrl = topicElement?.href;
+        const topicId = Utils.parseIdFromUrl(topicUrl, 'topic');
+        const topicTitle = topicElement?.textContent;
+        const torrentTopic = new TorrentTopic(topicId, topicTitle, topicUrl);
+
+        const torrent = new Torrent(torrentId, torrentTitle, torrentUrl, torrentSize, torrentTopic);
+
+        // Update UI based on whether the torrent is downloaded
+        document.body.style.backgroundColor = torrent.isDownloaded(profile.downloadedTorrents) ? 'red' : 'green';
+
+        // Add event listener to download button
+        const downloadButton = document.querySelector('#tor-reged .dl-stub.dl-link');
+        if (downloadButton) {
+            downloadButton.addEventListener('click', () => {
+                if (!torrent.isDownloaded(profile.downloadedTorrents)) {
+                    profile.addDownloadedTorrent(torrent);
+                    StorageManager.saveProfile(profile);
+                }
+            });
+        }
+    }
+
     // OLD CODE PAST HERE (to check functionality).
 
     // ==Constants==
