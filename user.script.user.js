@@ -165,6 +165,34 @@
         }
     };
 
+    // ==Quota Manager==
+    // ==Quota Manager==
+    const QuotaManager = {
+        calculateDailyQuota(profile) {
+            const { ratio, uploaded, downloaded } = profile.stats;
+
+            // Example logic: Quota depends on ratio and uploaded data
+            if (ratio >= 1.0 && uploaded >= 100 * 1024 * 1024 * 1024) return 100; // 100 GB for high ratios
+            if (ratio >= 1.0) return 50; // 50 GB for ratio >= 1
+            if (ratio >= 0.5) return 20; // 20 GB for ratio >= 0.5
+            if (downloaded < 2 * 1024 * 1024 * 1024) return 5; // 5 GB for low downloaders
+            return 0; // No quota otherwise
+        },
+
+        calculateDownloadedToday(profile) {
+            const today = new Date().toDateString();
+            return profile.downloadedTorrents
+                .filter(torrent => new Date(torrent.downloadDate).toDateString() === today)
+                .reduce((total, torrent) => total + parseFloat(torrent.size || 0), 0); // Sum up sizes
+        },
+
+        calculateRemainingQuota(profile) {
+            const dailyQuota = this.calculateDailyQuota(profile);
+            const downloadedToday = this.calculateDownloadedToday(profile);
+            return Math.max(0, dailyQuota - downloadedToday);
+        }
+    };
+
     // ==Torrent Mapper==
     const TorrentMapper = {
         mapTrackerToTorrent(trackerRow, profile) {
@@ -1328,59 +1356,22 @@
 
     // ==Main==
     function initializeScript() {
-        // Initialize the profile (if no profile has been set yet.) - This should only happen once.
-        if (!getProfile()) {
-            console.debug("No profile is found. Assuming first run. Creating new profile.");
-            const profile = new Profile();
-            updateProfile(profile);
-        } else {
-            let timeUntilNextReset = calculateTimeUntilServerReset(true);
-
-            // Server reset interval (24 hours)
-            const resetIntervalSeconds = 24 * 60 * 60;
-
-            // Convert time until next reset to total seconds.
-            let secondsUntilNextReset =
-                (timeUntilNextReset.hours * 3600) +
-                (timeUntilNextReset.minutes * 60) +
-                timeUntilNextReset.seconds;
-
-            let lastResetTimeInSeconds = Math.floor(new Date().getTime() / 1000) - secondsUntilNextReset;
-
-            // Function to check if a given date is after the last reset
-            function isAfterLastReset(givenDate) {
-                // Convert the given date to seconds since the epoch
-                let givenDateInSeconds = Math.floor(givenDate.getTime() / 1000);
-                return givenDateInSeconds > lastResetTimeInSeconds;
-            }
-
-            // When ratio data is too old, we need to update it.
-            if (!isAfterLastReset(new Date(getProfile()?.ratio.lastUpdated))) {
-                const profileLink = document.querySelector("#page_header > div.topmenu > table > tbody > tr > td:nth-child(1) > a:nth-child(1)").href;
-                window.location.href = profileLink;
-            }
+        const profile = StorageManager.loadProfile();
+    
+        if (location.pathname.includes('profile.php')) {
+            handleProfilePage(profile);
+        } else if (location.pathname.includes('tracker.php')) {
+            handleTrackerPage(profile);
+        } else if (location.pathname.includes('viewtopic.php')) {
+            handleTorrentPage(profile);
+        } else if (location.pathname.includes('viewforum.php')) {
+            handleFormPage(profile);
         }
-
-        // Page specific script loading.
-        if (checkPage('profile_page')) {
-            handleProfilePage();
-        }
-
-        if (checkPage('topic_page')) {
-            handleTorrentPage();
-        }
-
-        if (checkPage('form_page')) {
-            handleFormPage();
-        }
-
-        if (checkPage('tracker_page')) {
-            handleTrackerPage();
-        }
-        // Methods for all pages after this.
-        showFreeleechCountdown();
-        showRemainingDownloads();
+    
+        StorageManager.saveProfile(profile);
     }
+    
+    initializeScript();    
     // ==/Main==
 
     initializeScript();
