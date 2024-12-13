@@ -165,6 +165,56 @@
         }
     };
 
+    // ==Torrent Mapper==
+    const TorrentMapper = {
+        mapTrackerToTorrent(trackerRow, profile) {
+            return this.mapRowToTorrent(
+                trackerRow,
+                profile,
+                'td:nth-of-type(3)', // Topic element selector
+                'td:nth-of-type(4)', // Subject element selector
+                'td:nth-of-type(6)'  // Size element selector
+            );
+        },
+
+        mapFormPostToTorrent(formRow, profile) {
+            if (/(announce)/.test(formRow.querySelector('img.topic_icon')?.src)) {
+                return null; // Skip announcements
+            }
+
+            return this.mapRowToTorrent(
+                formRow,
+                profile,
+                '#main_content_wrap .nav.nav-top a:last-of-type', // Topic element selector
+                'td:nth-of-type(2)', // Subject element selector
+                'td:nth-of-type(3) .dl-stub'  // Size element selector (fallback to 'unknown')
+            );
+        },
+
+        mapRowToTorrent(row, profile, topicSelector, subjectSelector, sizeSelector) {
+            const topicElement = row.querySelector(topicSelector);
+            const topicUrl = topicElement?.href || topicElement?.querySelector('a')?.href;
+            const topicId = Utils.parseIdFromUrl(topicUrl, 'topic');
+            const topicTitle = topicElement?.textContent?.trim();
+            const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
+
+            const subjectElement = row.querySelector(subjectSelector);
+            const subject = subjectElement?.textContent?.trim();
+            const url = subjectElement?.querySelector('a')?.href;
+            const size = row.querySelector(sizeSelector)?.textContent?.trim() || 'unknown';
+            const id = Utils.parseIdFromUrl(url, 'torrent');
+
+            const torrent = new Torrent(id, subject, url, size, topic);
+
+            // Filtering logic based on user preferences
+            if (profile.preferences.hideDownloadedTorrents && torrent.isDownloaded(profile.downloadedTorrents)) {
+                row.style.display = 'none';
+                return null;
+            }
+
+            return torrent;
+        }
+    };
 
     // OLD CODE PAST HERE (to check functionality).
 
@@ -478,81 +528,6 @@
             GM_deleteValue(PROFILE_KEY);
             location.reload();
         }
-    }
-    // TODO: this can probably be also be turned into a reusable method for both topic and tracker.
-    function mapTrackerToTorrent(trackerRow) {
-        const topicElement = trackerRow.querySelector('td:nth-of-type(3)');
-        const topicUrl = topicElement.querySelector('a')?.href;
-        const topicId = getIdFromUrl(topicUrl, 'topic');
-        const topicTitle = topicElement.textContent?.trim();
-        const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
-
-        const subjectElement = trackerRow.querySelector('td:nth-of-type(4)');
-        const subject = subjectElement.textContent?.trim();
-        const url = subjectElement.querySelector('a')?.href;
-        const size = trackerRow.querySelector('td:nth-of-type(6)').textContent?.trim();
-        const id = url.split('?t=').pop();
-
-        // 3. Create a Torrent class object.
-        const torrent = new Torrent(id, subject, url, size, topic);
-
-        if (getPreference('hideDownloadedTorrents') ?? false) {
-            // TODO: might be a better idea to filter out when initially filtering?
-            if (!isTorrentAlreadyDownloaded(id)) {
-                return torrent;
-            } else {
-                // Mark downloaded download depending on it's setting.
-                if (getPreference('hideDownloadedTorrents') ?? false) {
-                    trackerRow?.setAttribute('style', 'display:none');
-                } else {
-                    topicElement?.setAttribute('style', 'color:green;');
-                }
-            }
-        } else {
-            return torrent;
-        }
-
-        return false;
-    }
-
-    function mapFormPostToTorrent(formRow) {
-        // Some form posts are ads or announcements, so no torrents. We skip those.
-        if (/(announce)/.test(formRow.querySelector('img.topic_icon')?.src)) {
-            return;
-        }
-
-        const topicElement = document.querySelector("#main_content_wrap > table:nth-child(4) > tbody > tr:nth-child(1) > td:nth-child(1) > table > tbody > tr > td.nav.nav-top > a:last-of-type")
-        const topicUrl = topicElement.href;
-        const topicId = getIdFromUrl(topicUrl, 'topic');
-        const topicTitle = topicElement.textContent?.trim();
-        const topic = new TorrentTopic(topicId, topicTitle, topicUrl);
-
-        const subjectElement = formRow.querySelector('td:nth-of-type(2)');
-        const subject = subjectElement.textContent?.trim();
-        const url = subjectElement.querySelector('a').href;
-        const size = formRow.querySelector('td:nth-of-type(3) .dl-stub').textContent?.trim();
-        const id = url.split('?t=').pop();
-
-        // 3. Create a Torrent class object.
-        const torrent = new Torrent(id, subject, url, size, topic);
-
-        if (getPreference('hideDownloadedTorrents') ?? false) {
-            // TODO: might be a better idea to filter out when initially filtering?
-            if (!isTorrentAlreadyDownloaded(id)) {
-                return torrent;
-            } else {
-                // Mark downloaded download depending on it's setting.
-                if (getPreference('hideDownloadedTorrents') ?? false) {
-                    formRow?.setAttribute('style', 'display:none');
-                } else {
-                    topicElement?.setAttribute('style', 'color:green;');
-                }
-            }
-        } else {
-            return torrent;
-        }
-
-        return false;
     }
     // ==/Helper methods==
 
