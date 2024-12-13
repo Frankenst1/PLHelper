@@ -22,6 +22,68 @@
 // TODO: handleFormPage and handleTorrentPage have a very similar body. Might be a good idea to have it more abstract and reuse methods between the two for maintainability.
 (function () {
     'use strict';
+    // ==Configuration==
+    const Config = {
+        TIMEZONE_OFFSET: (24 + (new Date().getTimezoneOffset() + (3 * 60)) / 60) % 24,
+        AVAILABLE_VIDEO_FORMATS: ["1080", "720", "4K", "2160"],
+        URL_DELAY: 1000,
+        SIZE_UNITS: ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+        STORAGE_KEYS: {
+            PROFILE: 'profile',
+            SETTINGS: 'settings',
+            DOWNLOADED_TORRENTS: 'downloadedTorrents'
+        },
+        DEBUG_MODE: true
+    };
+
+    // ==Utilities==
+    const Utils = {
+        logDebug(message) {
+            if (Config.DEBUG_MODE) {
+                console.debug(`[PLHelper Debug]: ${message}`);
+            }
+        },
+
+        convertSizeBetweenUnits(value, fromUnit, toUnit) {
+            const fromIndex = Config.SIZE_UNITS.indexOf(fromUnit);
+            const toIndex = Config.SIZE_UNITS.indexOf(toUnit);
+
+            if (fromIndex === -1 || toIndex === -1) {
+                throw new Error('Invalid unit provided');
+            }
+
+            const bytes = value * Math.pow(1024, fromIndex);
+            return Number((bytes / Math.pow(1024, toIndex)).toFixed(2));
+        },
+
+        isToday(date) {
+            const today = new Date();
+            return (
+                date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear()
+            );
+        },
+
+        parseIdFromUrl(url, type) {
+            let id;
+            switch (type) {
+                case 'topic':
+                    id = url.split('?f=').pop();
+                    break;
+                case 'torrent':
+                    id = url.split('?t=').pop();
+                    break;
+                default:
+                    Utils.logDebug(`Invalid URL type: ${type}`);
+                    return null;
+            }
+            return id;
+        }
+    };
+
+
+    // OLD CODE PAST HERE (to check functionality).
 
     // ==Constants==
     const TIMEZONE_OFFSET = (24 + (new Date().getTimezoneOffset() + (3 * 60)) / 60) % 24;
@@ -103,9 +165,9 @@
 
         // Compare the components of the dateToCheck with today's date
         const isSameDate =
-              dateToCheck.getDate() === today.getDate() &&
-              dateToCheck.getMonth() === today.getMonth() &&
-              dateToCheck.getFullYear() === today.getFullYear();
+            dateToCheck.getDate() === today.getDate() &&
+            dateToCheck.getMonth() === today.getMonth() &&
+            dateToCheck.getFullYear() === today.getFullYear();
 
         // Return true if the dateToCheck is today, otherwise return false
         return isSameDate;
@@ -312,7 +374,7 @@
             return date.getTimezoneOffset() * -1; // Convert to positive
         }
 
-        if(asObject){
+        if (asObject) {
             return { hours: hours, minutes: minutes, seconds: seconds };
         }
 
@@ -803,9 +865,9 @@
         logo.appendChild(downloadsRemainingElement);
 
         downloadsRemainingElement.style.color = 'green';
-        if(remainingQuota < 10){
+        if (remainingQuota < 10) {
             downloadsRemainingElement.style.color = 'orange';
-        } else if(remainingQuota <= 0){
+        } else if (remainingQuota <= 0) {
             downloadsRemainingElement.style.color = 'red';
         }
     }
@@ -890,11 +952,11 @@
             // TODO: might be a good idea to just manually fetch the IDs?
             const allowedTopics = ["MetArt", "Picture", "Misc", "Magazines", "Photo", "Hentai: main subsection", "Manga", "Art", "HCG", "Cartoons", "Comics"];
             const topicIds = getAllTopics()
-            .filter(topic => {
-                const topicToCheck = topic.title.toLowerCase();
-                return allowedTopics.some(word => topicToCheck.includes(word.toLowerCase()));
-            })
-            .map(topic => topic.id);
+                .filter(topic => {
+                    const topicToCheck = topic.title.toLowerCase();
+                    return allowedTopics.some(word => topicToCheck.includes(word.toLowerCase()));
+                })
+                .map(topic => topic.id);
 
             if (topicIds.length == 0) {
                 return [];
@@ -1244,14 +1306,14 @@
             let lastResetTimeInSeconds = Math.floor(new Date().getTime() / 1000) - secondsUntilNextReset;
 
             // Function to check if a given date is after the last reset
-            function isAfterLastReset(givenDate){
+            function isAfterLastReset(givenDate) {
                 // Convert the given date to seconds since the epoch
                 let givenDateInSeconds = Math.floor(givenDate.getTime() / 1000);
                 return givenDateInSeconds > lastResetTimeInSeconds;
             }
 
             // When ratio data is too old, we need to update it.
-            if(!isAfterLastReset(new Date(getProfile()?.ratio.lastUpdated))){
+            if (!isAfterLastReset(new Date(getProfile()?.ratio.lastUpdated))) {
                 const profileLink = document.querySelector("#page_header > div.topmenu > table > tbody > tr > td:nth-child(1) > a:nth-child(1)").href;
                 window.location.href = profileLink;
             }
