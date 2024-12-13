@@ -378,16 +378,6 @@
     }
 
     // OLD CODE PAST HERE (to check functionality).
-
-    // ==Constants==
-    const TIMEZONE_OFFSET = (24 + (new Date().getTimezoneOffset() + (3 * 60)) / 60) % 24;
-    const AVAILABLE_VIDEO_FORMATS = ["1080", "720", "4K", "2160"];
-    const URL_DELAY = 1000;
-    const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    // Storage keys
-    const PROFILE_KEY = 'profile';
-    // ==/Constants==
-
     // ==Classes==
     class ProfilePreferences {
         constructor(hideDownloadedTorrents = [], videoFormats = []) {
@@ -1356,8 +1346,9 @@
 
     // ==Main==
     function initializeScript() {
+        Utils.logDebug('Testing the initialize script...');
         const profile = StorageManager.loadProfile();
-    
+
         if (location.pathname.includes('profile.php')) {
             handleProfilePage(profile);
         } else if (location.pathname.includes('tracker.php')) {
@@ -1367,12 +1358,9 @@
         } else if (location.pathname.includes('viewforum.php')) {
             handleFormPage(profile);
         }
-    
+
         StorageManager.saveProfile(profile);
     }
-    
-    initializeScript();    
-    // ==/Main==
 
     initializeScript();
 })();
