@@ -122,6 +122,47 @@
                 this.stats = { ...this.stats, ...stats };
             }
         }    
+    // ==Storage Manager==
+    const StorageManager = {
+        get(key, defaultValue) {
+            return GM_getValue(key, defaultValue);
+        },
+
+        set(key, value) {
+            GM_setValue(key, value);
+        },
+
+        delete(key) {
+            GM_deleteValue(key);
+        },
+
+        loadProfile() {
+            return this.get(Config.STORAGE_KEYS.PROFILE, new Profile());
+        },
+
+        saveProfile(profile) {
+            this.set(Config.STORAGE_KEYS.PROFILE, profile);
+        },
+
+        loadDownloadedTorrents() {
+            return this.get(Config.STORAGE_KEYS.DOWNLOADED_TORRENTS, []);
+        },
+
+        saveDownloadedTorrents(torrents) {
+            this.set(Config.STORAGE_KEYS.DOWNLOADED_TORRENTS, torrents);
+        },
+
+        loadSettings() {
+            return this.get(Config.STORAGE_KEYS.SETTINGS, {
+                hideDownloadedTorrents: false,
+                preferredFormats: Config.AVAILABLE_VIDEO_FORMATS
+            });
+        },
+
+        saveSettings(settings) {
+            this.set(Config.STORAGE_KEYS.SETTINGS, settings);
+        }
+    };
 
 
     // OLD CODE PAST HERE (to check functionality).
