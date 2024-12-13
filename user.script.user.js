@@ -165,9 +165,19 @@
     }
 
     class Profile {
-        constructor(preferences = {}, stats = { ratio: 0, uploaded: 0, downloaded: 0 }, downloadedTorrents = []) {
+        constructor(
+            preferences = {},
+            stats = {
+                ratio: 0,
+                uploaded: 0,
+                downloaded: 0,
+                soloUpload: 0,
+                bonus: 0
+            },
+            downloadedTorrents = []
+        ) {
             this.preferences = preferences;
-            this.stats = stats;
+            this.stats = stats; // Contains all statistical properties
             this.downloadedTorrents = downloadedTorrents;
         }
 
@@ -176,38 +186,51 @@
         }
 
         updateStats(stats) {
-            this.stats = { ...this.stats, ...stats };
+            this.stats = { ...this.stats, ...stats }; // Merge new stats into existing ones
         }
 
-        // Might move to ProfileUtils in case profile-related utilities grow in the future.
         updateStatsFromPage() {
             // Fetch stats from the page
-            const ratio = parseFloat(document.querySelector('#stats-ratio')?.textContent || 0);
+            const ratio = parseFloat(document.querySelector('#u_ratio b.gen')?.textContent || 0);
 
-            // Convert GB values to bytes using the utility function
             const uploaded = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#stats-uploaded')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                parseFloat(document.querySelector('#u_up_total span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
                 'GB',
                 'B'
             );
 
             const downloaded = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#stats-downloaded')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                parseFloat(document.querySelector('#u_down_total span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
                 'GB',
                 'B'
             );
 
-            // Update stats
+            const soloUpload = Utils.convertSizeBetweenUnits(
+                parseFloat(document.querySelector('#u_up_release span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                'GB',
+                'B'
+            );
+
+            const bonus = Utils.convertSizeBetweenUnits(
+                parseFloat(document.querySelector('#u_up_bonus span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                'GB',
+                'B'
+            );
+
+            // Update all stats in one call
             this.updateStats({
                 ratio: ratio,
                 uploaded: uploaded,
                 downloaded: downloaded,
+                soloUpload: soloUpload,
+                bonus: bonus,
                 lastUpdated: new Date().toString()
             });
 
             Utils.logDebug('Profile stats updated from page:', this.stats);
         }
     }
+
 
     // ==Storage Manager==
     const StorageManager = {
@@ -419,7 +442,6 @@
         // Save updated profile
         StorageManager.saveProfile(profile);
     }
-
 
     function handleTrackerPage(profile) {
         const rows = document.querySelectorAll('#main_content table#tor-tbl tr.tCenter');
