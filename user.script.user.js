@@ -174,6 +174,35 @@
         updateStats(stats) {
             this.stats = { ...this.stats, ...stats };
         }
+
+        // Might move to ProfileUtils in case profile-related utilities grow in the future.
+        updateStatsFromPage() {
+            // Fetch stats from the page
+            const ratio = parseFloat(document.querySelector('#stats-ratio')?.textContent || 0);
+
+            // Convert GB values to bytes using the utility function
+            const uploaded = Utils.convertSizeBetweenUnits(
+                parseFloat(document.querySelector('#stats-uploaded')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                'GB',
+                'B'
+            );
+
+            const downloaded = Utils.convertSizeBetweenUnits(
+                parseFloat(document.querySelector('#stats-downloaded')?.textContent.replace(/[^0-9.]/g, '') || 0),
+                'GB',
+                'B'
+            );
+
+            // Update stats
+            this.updateStats({
+                ratio: ratio,
+                uploaded: uploaded,
+                downloaded: downloaded,
+                lastUpdated: new Date().toString()
+            });
+
+            Utils.logDebug('Profile stats updated from page:', this.stats);
+        }
     }
 
     // ==Storage Manager==
@@ -372,29 +401,18 @@
         const wrapper = document.querySelector('#main_content_wrap');
         if (!wrapper) return;
 
-        // Fetch stats from the page
-        const ratio = parseFloat(document.querySelector('#stats-ratio')?.textContent || 0);
-        const uploaded = parseFloat(document.querySelector('#stats-uploaded')?.textContent || 0) * 1024 * 1024 * 1024; // GB to bytes
-        const downloaded = parseFloat(document.querySelector('#stats-downloaded')?.textContent || 0) * 1024 * 1024 * 1024; // GB to bytes
+        // Update profile stats from the page
+        profile.updateStatsFromPage();
 
-        // Update profile stats
-        profile.updateStats({
-            ratio: ratio,
-            uploaded: uploaded,
-            downloaded: downloaded,
-            lastUpdated: new Date().toString()
-        });
-
-        Utils.logDebug('Profile updated with new stats:', profile.stats);
-
-        // Render updated profile
+        // Render torrents table
         const torrentsTable = UIHelpers.generateTorrentsTable(profile.downloadedTorrents);
         wrapper.appendChild(torrentsTable);
 
+        // Render stats panel
         const statsPanel = UIHelpers.generateStatsPanel(profile);
         wrapper.appendChild(statsPanel);
 
-        // Save the updated profile to storage
+        // Save updated profile
         StorageManager.saveProfile(profile);
     }
 
