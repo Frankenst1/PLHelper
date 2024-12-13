@@ -39,9 +39,13 @@
 
     // ==Utilities==
     const Utils = {
-        logDebug(message) {
+        logDebug(message, ...data) {
             if (Config.DEBUG_MODE) {
-                console.debug(`[PLHelper Debug]: ${message}`);
+                if (data.length) {
+                    console.debug(`[PLHelper Debug]: ${message}`, ...data);
+                } else {
+                    console.debug(`[PLHelper Debug]: ${message}`);
+                }
             }
         },
 
