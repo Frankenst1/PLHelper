@@ -216,6 +216,73 @@
         }
     };
 
+    // ==UI Helpers==
+    const UIHelpers = {
+        addTorrentOpenerUI(torrents) {
+            const container = document.createElement('fieldset');
+            container.className = 'torrent-opener-ui';
+            container.innerHTML = '<legend>Torrent Opener</legend>';
+
+            torrents.forEach(torrent => {
+                const button = document.createElement('button');
+                button.textContent = `Open: ${torrent.title}`;
+                button.addEventListener('click', () => GM_openInTab(torrent.pageUrl, { active: true }));
+                container.appendChild(button);
+            });
+
+            document.body.appendChild(container);
+        },
+
+        generateTorrentsTable(torrents) {
+            const table = document.createElement('table');
+            table.className = 'torrent-table';
+
+            // Add table headers
+            const headers = ['Title', 'Size', 'Topic'];
+            const headerRow = document.createElement('tr');
+            headers.forEach(headerText => {
+                const headerCell = document.createElement('th');
+                headerCell.textContent = headerText;
+                headerRow.appendChild(headerCell);
+            });
+            table.appendChild(headerRow);
+
+            // Add rows for each torrent
+            torrents.forEach(torrent => {
+                const row = document.createElement('tr');
+
+                const titleCell = document.createElement('td');
+                titleCell.textContent = torrent.title;
+                row.appendChild(titleCell);
+
+                const sizeCell = document.createElement('td');
+                sizeCell.textContent = torrent.size;
+                row.appendChild(sizeCell);
+
+                const topicCell = document.createElement('td');
+                topicCell.textContent = torrent.topic?.title || 'Unknown';
+                row.appendChild(topicCell);
+
+                table.appendChild(row);
+            });
+
+            return table;
+        },
+
+        generateStatsPanel(profile) {
+            const statsContainer = document.createElement('div');
+            statsContainer.className = 'stats-panel';
+
+            statsContainer.innerHTML = `
+            <p>Uploaded: ${Utils.convertSizeBetweenUnits(profile.stats.uploaded, 'B', 'GB')} GB</p>
+            <p>Downloaded: ${Utils.convertSizeBetweenUnits(profile.stats.downloaded, 'B', 'GB')} GB</p>
+            <p>Ratio: ${profile.stats.ratio.toFixed(2)}</p>
+        `;
+
+            return statsContainer;
+        }
+    };
+
     // OLD CODE PAST HERE (to check functionality).
 
     // ==Constants==
@@ -686,122 +753,6 @@
         label.appendChild(span);
 
         return label;
-    }
-
-    function generateTorrentsTable(torrents) {
-        if (torrents.length <= 0) {
-            const table = document.createElement('table');
-            table.className = 'forumline tCenter';
-            const row = document.createElement('tr');
-            const noResults = document.createElement('td');
-            noResults.innerText = 'No torrents downloaded yet.';
-
-            row.appendChild(noResults);
-            table.appendChild(row);
-
-            return table;
-        }
-
-        // Create the table element
-        const table = document.createElement('table');
-        table.className = 'forumline tablesorter';
-        table.id = 'tor-tbl';
-
-        // Create the table header
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-
-        // Create the "Forum" column header
-        const forumHeader = document.createElement('th');
-        forumHeader.className = 'header';
-        forumHeader.width = '25%';
-        forumHeader.innerHTML = '<b class="tbs-text"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Forum</font></font></b><span class="tbs-icon">&nbsp;&nbsp;</span>';
-        headerRow.appendChild(forumHeader);
-
-        // Create the "Subject" column header
-        const subjectHeader = document.createElement('th');
-        subjectHeader.className = 'header';
-        subjectHeader.width = '75%';
-        subjectHeader.innerHTML = '<b class="tbs-text"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Subject</font></font></b><span class="tbs-icon">&nbsp;&nbsp;</span>';
-        headerRow.appendChild(subjectHeader);
-
-        // Create the "Size" column header
-        const sizeHeader = document.createElement('th');
-        sizeHeader.className = 'header';
-        sizeHeader.innerHTML = '<b class="tbs-text"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Size</font></font></b><span class="tbs-icon">&nbsp;&nbsp;</span>';
-        headerRow.appendChild(sizeHeader);
-
-        // Create the "Added" column header
-        const addedHeader = document.createElement('th');
-        addedHeader.className = 'header';
-        addedHeader.innerHTML = '<b class="tbs-text"><font style="vertical-align: inherit;"><font style="vertical-align: inherit;">Added</font></font></b><span class="tbs-icon">&nbsp;&nbsp;</span>';
-        headerRow.appendChild(addedHeader);
-
-        thead.appendChild(headerRow);
-        table.appendChild(thead);
-
-        // Create the table body
-        const tbody = document.createElement('tbody');
-
-        // Iterate over the data and generate table rows
-        torrents.forEach((item) => {
-            const row = document.createElement('tr');
-            row.className = 'tCenter';
-
-            const forumColumn = document.createElement('td');
-            forumColumn.className = 'row1';
-            const forumLink = document.createElement('a');
-            forumLink.className = 'gen f';
-            const forumId = item.topic?.id;
-            forumLink.href = `https://pornolab.net/forum/tracker.php?f=${forumId}`;
-            forumLink.innerText = item.topic?.title ? item.topic?.title : 'N/A';
-            forumColumn.appendChild(forumLink);
-            row.appendChild(forumColumn);
-
-            const subjectColumn = document.createElement('td');
-            subjectColumn.className = 'row4 med tLeft u';
-            const subjectLink = document.createElement('a');
-            subjectLink.className = 'med tLink bold';
-            subjectLink.href = getTorrentPage(item);
-            subjectLink.innerHTML = item.title;
-            subjectColumn.appendChild(subjectLink);
-            row.appendChild(subjectColumn);
-
-            const sizeColumn = document.createElement('td');
-            sizeColumn.className = 'row4 small nowrap';
-            const sizeLink = document.createElement('a');
-            sizeLink.className = 'small tr-dl dl-stub';
-            sizeLink.href = getTorrentDownloadLink(item);
-            sizeLink.innerText = item.size;
-            sizeColumn.appendChild(sizeLink);
-            row.appendChild(sizeColumn);
-
-            const addedColumn = document.createElement('td');
-            addedColumn.className = 'row4 small nowrap';
-            const addedText = document.createElement('p');
-            addedText.innerText = 'N/A';
-            if (typeof item.downloadDate === 'string' || item.downloadDate instanceof String) {
-                addedText.innerText = item.downloadDate;
-            }
-            addedColumn.appendChild(addedText);
-            row.appendChild(addedColumn);
-
-            tbody.appendChild(row);
-        });
-
-        table.appendChild(tbody);
-
-        // Create the table footer
-        const tfoot = document.createElement('tfoot');
-        const footerRow = document.createElement('tr');
-        const footerColumn = document.createElement('td');
-        footerColumn.className = 'catBottom';
-        footerColumn.colSpan = '100%';
-        footerRow.appendChild(footerColumn);
-        tfoot.appendChild(footerRow);
-        table.appendChild(tfoot);
-
-        return table;
     }
     // ==/DOM methods==
 
