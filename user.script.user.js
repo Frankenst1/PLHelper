@@ -200,7 +200,8 @@
         },
 
         loadDownloadedTorrents() {
-            return this.get(Config.STORAGE_KEYS.DOWNLOADED_TORRENTS, []);
+            const rawTorrents = this.get(Config.STORAGE_KEYS.DOWNLOADED_TORRENTS, []);
+            return rawTorrents.map(torrent => new Torrent(torrent.id, torrent.title, torrent.pageUrl, torrent.size, torrent.topic, torrent.downloadDate));
         },
 
         saveDownloadedTorrents(torrents) {
@@ -208,10 +209,12 @@
         },
 
         loadSettings() {
-            return this.get(Config.STORAGE_KEYS.SETTINGS, {
+            const rawSettings = this.get(Config.STORAGE_KEYS.SETTINGS, {
                 hideDownloadedTorrents: false,
                 preferredFormats: Config.AVAILABLE_VIDEO_FORMATS
             });
+            // No transformation needed unless settings become more complex
+            return rawSettings;
         },
 
         saveSettings(settings) {
@@ -1097,7 +1100,7 @@
         }
     }
 
-    function handleProfilePage() {
+    function handleProfilePageOLD() {
         addElements();
         updateProfileWithProfilePageData();
 
@@ -1384,7 +1387,8 @@
     // ==Main==
     function initializeScript() {
         const profile = StorageManager.loadProfile();
-    
+        console.log(profile);
+
         // TODO: Transform legacy data to new structure if needed
         // profile = ProfileMigration.transformLegacyProfile(profile);
         // Ensure the profile has the `stats` property
