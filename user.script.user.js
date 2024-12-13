@@ -134,6 +134,7 @@
         }
     };
 
+
     // ==Data Structures==
     class Torrent {
         constructor(id, title, pageUrl, size, topic, downloadDate = null) {
@@ -190,7 +191,8 @@
         },
 
         loadProfile() {
-            return this.get(Config.STORAGE_KEYS.PROFILE, new Profile());
+            const rawProfile = this.get(Config.STORAGE_KEYS.PROFILE, new Profile());
+            return new Profile(rawProfile.preferences, rawProfile.stats, rawProfile.downloadedTorrents);
         },
 
         saveProfile(profile) {
@@ -367,17 +369,32 @@
         const wrapper = document.querySelector('#main_content_wrap');
         if (!wrapper) return;
 
-        // Generate torrents table
+        // Fetch stats from the page
+        const ratio = parseFloat(document.querySelector('#stats-ratio')?.textContent || 0);
+        const uploaded = parseFloat(document.querySelector('#stats-uploaded')?.textContent || 0) * 1024 * 1024 * 1024; // GB to bytes
+        const downloaded = parseFloat(document.querySelector('#stats-downloaded')?.textContent || 0) * 1024 * 1024 * 1024; // GB to bytes
+
+        // Update profile stats
+        profile.updateStats({
+            ratio: ratio,
+            uploaded: uploaded,
+            downloaded: downloaded,
+            lastUpdated: new Date().toString()
+        });
+
+        Utils.logDebug('Profile updated with new stats:', profile.stats);
+
+        // Render updated profile
         const torrentsTable = UIHelpers.generateTorrentsTable(profile.downloadedTorrents);
         wrapper.appendChild(torrentsTable);
 
-        // Generate stats panel
         const statsPanel = UIHelpers.generateStatsPanel(profile);
         wrapper.appendChild(statsPanel);
 
-        // Save any updates to the profile
+        // Save the updated profile to storage
         StorageManager.saveProfile(profile);
     }
+
 
     function handleTrackerPage(profile) {
         const rows = document.querySelectorAll('#main_content table#tor-tbl tr.tCenter');
@@ -1368,6 +1385,11 @@
     function initializeScript() {
         const profile = StorageManager.loadProfile();
     
+        // TODO: Transform legacy data to new structure if needed
+        // profile = ProfileMigration.transformLegacyProfile(profile);
+        // Ensure the profile has the `stats` property
+        // profile = ProfileMigration.ensureStats(profile);
+
         if (Utils.checkPage('profile_page')) {
             handleProfilePage(profile);
         } else if (Utils.checkPage('tracker_page')) {
@@ -1377,9 +1399,9 @@
         } else if (Utils.checkPage('form_page')) {
             handleFormPage(profile);
         }
-    
+
         StorageManager.saveProfile(profile);
-    }    
+    }
 
     initializeScript();
 })();
