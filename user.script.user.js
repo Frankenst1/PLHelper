@@ -15,6 +15,7 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
+// TODO: Migrate data from 1.X to 2.X version (example of changes: profile now has "stats" instead of "ratio".)
 // TODO: ability to change settings (ability to set preferences (video quality, tags, ...)).
 // TODO: add proper debugging.
 // TODO: add ability to start downloading the torrents as well?
@@ -98,6 +99,40 @@
         }
     };
 
+    // ==Migration (1.X -> 2.X)==
+    const ProfileMigration = {
+        isLegacyProfile(profile) {
+            // A legacy profile has a `ratio` object instead of a `stats` object
+            return profile.ratio && typeof profile.ratio === 'object';
+        },
+
+        transformLegacyProfile(legacyProfile) {
+            if (!this.isLegacyProfile(legacyProfile)) {
+                return legacyProfile; // Already in the new format
+            }
+
+            const { ratio, uploaded, downloaded, lastUpdated } = legacyProfile.ratio;
+
+            // Transform into the new profile structure
+            const transformedProfile = new Profile(
+                legacyProfile.preferences,
+                { ratio: parseFloat(ratio), uploaded: uploaded, downloaded: downloaded, lastUpdated: lastUpdated },
+                legacyProfile.downloadedTorrents
+            );
+
+            Utils.logDebug('Transformed legacy profile:', transformedProfile);
+            return transformedProfile;
+        },
+
+        ensureStats(profile) {
+            // Ensure `stats` exists in the new profile format
+            if (!profile.stats) {
+                profile.stats = { ratio: 0, uploaded: 0, downloaded: 0, lastUpdated: new Date().toString() };
+            }
+
+            return profile;
+        }
+    };
 
     // ==Data Structures==
     class Torrent {
