@@ -172,7 +172,8 @@
                 uploaded: 0,
                 downloaded: 0,
                 soloUpload: 0,
-                bonus: 0
+                bonus: 0,
+                lastUpdated: new Date().toString()
             },
             downloadedTorrents = []
         ) {
@@ -188,8 +189,9 @@
         updateStats(stats) {
             this.stats = { ...this.stats, ...stats }; // Merge new stats into existing ones
         }
-
-        updateStatsFromPage() {
+    
+        updateStatsFromProfilePage() {
+            // TODO: Add check if current page IS profile page. Otherwise, abort (?).
             // Fetch stats from the page
             const ratio = parseFloat(document.querySelector('#u_ratio b.gen')?.textContent || 0);
 
@@ -429,7 +431,7 @@
         if (!wrapper) return;
 
         // Update profile stats from the page
-        profile.updateStatsFromPage();
+        profile.updateStatsFromProfilePage();
 
         // Render torrents table
         const torrentsTable = UIHelpers.generateTorrentsTable(profile.downloadedTorrents);
