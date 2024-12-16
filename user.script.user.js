@@ -100,6 +100,10 @@
                 default:
                     return false;
             }
+        },
+
+        calculateNextRatio(currentRatio, targetRatios = [0.3, 0.5, 1.0]) {
+            return targetRatios.find(ratio => ratio > currentRatio) || currentRatio; // Default to currentRatio if no higher target exists
         }
     };
 
@@ -189,7 +193,7 @@
         updateStats(stats) {
             this.stats = { ...this.stats, ...stats }; // Merge new stats into existing ones
         }
-    
+
         updateStatsFromProfilePage() {
             // TODO: Add check if current page IS profile page. Otherwise, abort (?).
             // Fetch stats from the page
@@ -230,6 +234,27 @@
             });
 
             Utils.logDebug('Profile stats updated from page:', this.stats);
+        }
+
+        predictRatio() {
+            const { uploaded, downloaded } = this.stats;
+            const additionalUpload = 0; // Assume no additional upload for now
+            return downloaded > 0 ? (uploaded + additionalUpload) / downloaded : 0;
+        }
+
+        calculateRequiredUpload(targetRatio) {
+            const { uploaded, downloaded } = this.stats;
+            console.log(uploaded/downloaded, this.stats.ratio);
+
+            if ((uploaded / downloaded) >= targetRatio) {
+                Utils.logDebug(`Upload quota already reached for target ratio ${targetRatio}`);
+                return 0;
+            }
+
+            // Calculate the required upload
+            const requiredUpload = targetRatio * downloaded - uploaded;
+            console.log("PEPE", requiredUpload);
+            return Math.max(0, requiredUpload); // Ensure non-negative result
         }
     }
 
@@ -437,9 +462,24 @@
         const torrentsTable = UIHelpers.generateTorrentsTable(profile.downloadedTorrents);
         wrapper.appendChild(torrentsTable);
 
+        // Calculate next ratio and required upload
+        const nextRatio = Utils.calculateNextRatio(profile.stats.ratio);
+        const requiredUpload = profile.calculateRequiredUpload(nextRatio);
+
+        Utils.logDebug('Next ratio and upload requirements:', {
+            nextRatio,
+            requiredUpload,
+            stats: profile.stats
+        });
+
+        console.log("Required upload for next ratio is: ", nextRatio, requiredUpload);
+
         // Render stats panel
-        const statsPanel = UIHelpers.generateStatsPanel(profile);
-        wrapper.appendChild(statsPanel);
+        const statsPanel = UIHelpers.generateStatsPanel(profile, {
+            nextRatio,
+            requiredUpload
+        });
+        //wrapper.appendChild(statsPanel);
 
         // Save updated profile
         StorageManager.saveProfile(profile);
