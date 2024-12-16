@@ -108,7 +108,7 @@
         },
 
         parseSize(valueWithUnit) {
-            const match = valueWithUnit.match(/^([\d\.]+)\s*([A-Za-z]+)$/);
+            const match = valueWithUnit.match(/^([\d.]+)\s*([A-Za-z]+)$/);
             if (match) {
                 return {
                     value: parseFloat(match[1]),
