@@ -49,7 +49,7 @@
             }
         },
 
-        convertSizeBetweenUnits(value, fromUnit, toUnit) {
+        convertSizeBetweenUnits(value, fromUnit, toUnit = 'B') {
             const fromIndex = Config.SIZE_UNITS.indexOf(fromUnit);
             const toIndex = Config.SIZE_UNITS.indexOf(toUnit);
 
@@ -104,6 +104,18 @@
 
         calculateNextRatio(currentRatio, targetRatios = [0.3, 0.5, 1.0]) {
             return targetRatios.find(ratio => ratio > currentRatio) || currentRatio; // Default to currentRatio if no higher target exists
+        },
+
+        parseSize(valueWithUnit) {
+            const match = valueWithUnit.match(/^([\d\.]+)\s*([A-Za-z]+)$/);
+            if (match) {
+                return {
+                    value: parseFloat(match[1]),
+                    unit: match[2]
+                };
+            } else {
+                return null;
+            }
         }
     };
 
@@ -199,37 +211,18 @@
             // Fetch stats from the page
             const ratio = parseFloat(document.querySelector('#u_ratio b.gen')?.textContent || 0);
 
-            const uploaded = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#u_up_total span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
-                'GB',
-                'B'
-            );
-
-            const downloaded = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#u_down_total span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
-                'GB',
-                'B'
-            );
-
-            const soloUpload = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#u_up_release span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
-                'GB',
-                'B'
-            );
-
-            const bonus = Utils.convertSizeBetweenUnits(
-                parseFloat(document.querySelector('#u_up_bonus span.editable.bold')?.textContent.replace(/[^0-9.]/g, '') || 0),
-                'GB',
-                'B'
-            );
+            const uploaded = Utils.parseSize(document.querySelector('#u_up_total span.editable.bold')?.textContent)
+            const downloaded = Utils.parseSize(document.querySelector('#u_down_total span.editable.bold')?.textContent);
+            const soloUpload = Utils.parseSize(document.querySelector('#u_up_release span.editable.bold')?.textContent);
+            const bonus = Utils.parseSize(document.querySelector('#u_up_bonus span.editable.bold')?.textContent);
 
             // Update all stats in one call
             this.updateStats({
                 ratio: ratio,
-                uploaded: uploaded,
-                downloaded: downloaded,
-                soloUpload: soloUpload,
-                bonus: bonus,
+                uploaded: Utils.convertSizeBetweenUnits(uploaded.value, uploaded.unit, 'B'),
+                downloaded: Utils.convertSizeBetweenUnits(downloaded.value, downloaded.unit, 'B'),
+                soloUpload: Utils.convertSizeBetweenUnits(soloUpload.value, soloUpload.unit, 'B'),
+                bonus: Utils.convertSizeBetweenUnits(bonus.value, bonus.unit, 'B'),
                 lastUpdated: new Date().toString()
             });
 
@@ -244,7 +237,7 @@
 
         calculateRequiredUpload(targetRatio) {
             const { uploaded, downloaded } = this.stats;
-            console.log(uploaded/downloaded, this.stats.ratio);
+            console.log(uploaded / downloaded, this.stats.ratio);
 
             if ((uploaded / downloaded) >= targetRatio) {
                 Utils.logDebug(`Upload quota already reached for target ratio ${targetRatio}`);
