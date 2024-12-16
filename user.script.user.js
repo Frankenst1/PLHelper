@@ -262,7 +262,6 @@
 
             // Calculate the required upload
             const requiredUpload = targetRatio * downloaded - uploaded;
-            console.log("PEPE", requiredUpload);
             return Math.max(0, requiredUpload); // Ensure non-negative result
         }
     }
@@ -444,14 +443,15 @@
             return table;
         },
 
-        generateStatsPanel(profile) {
+        generateStatsPanel(profile, nextRatio) {
             const statsContainer = document.createElement('div');
             statsContainer.className = 'stats-panel';
 
             statsContainer.innerHTML = `
-            <p>Uploaded: ${Utils.convertSizeBetweenUnits(profile.stats.uploaded, 'B', 'GB')} GB</p>
-            <p>Downloaded: ${Utils.convertSizeBetweenUnits(profile.stats.downloaded, 'B', 'GB')} GB</p>
-            <p>Ratio: ${profile.stats.ratio.toFixed(2)}</p>
+            <p>Uploaded: ${Utils.formatBytes(profile.stats.uploaded)}</p>
+            <p>Downloaded: ${Utils.formatBytes(profile.stats.downloaded)}</p>
+            <p>Next Ratio: ${nextRatio.nextRatio}</p>
+            <p>Upload needed for next ratio: ${nextRatio.requiredUpload}</p>
         `;
 
             return statsContainer;
@@ -480,14 +480,12 @@
             stats: profile.stats
         });
 
-        console.log("Required upload for next ratio is: ", nextRatio, requiredUpload);
-
         // Render stats panel
         const statsPanel = UIHelpers.generateStatsPanel(profile, {
             nextRatio,
             requiredUpload
         });
-        //wrapper.appendChild(statsPanel);
+        document.getElementById('u_ratio').appendChild(statsPanel);
 
         // Save updated profile
         StorageManager.saveProfile(profile);
@@ -598,8 +596,6 @@
 
     function updateProfile(profile) {
         GM_setValue(PROFILE_KEY, profile);
-
-        console.debug("Profile was updated.");
     }
 
     function getIdFromUrl(url, type) {
@@ -1453,7 +1449,6 @@
     // ==Main==
     function initializeScript() {
         const profile = StorageManager.loadProfile();
-        console.log(profile);
 
         // TODO: Transform legacy data to new structure if needed
         // profile = ProfileMigration.transformLegacyProfile(profile);
