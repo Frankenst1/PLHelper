@@ -460,33 +460,33 @@
         generateCountdownPanel(targetTime, showTargetDate = false, countdownLabelText = "Time remaining:") {
             const countdownContainer = document.createElement('div');
             countdownContainer.className = 'countdown-panel';
-        
+
             const countdownLabel = document.createElement('p');
             countdownLabel.textContent = countdownLabelText; // Use the custom text here
             countdownContainer.appendChild(countdownLabel);
-        
+
             const countdownTime = document.createElement('span');
             countdownContainer.appendChild(countdownTime);
-        
+
             // Optional: Display the target date if `showTargetDate` is true
             if (showTargetDate) {
                 const targetDateLabel = document.createElement('p');
-                targetDateLabel.textContent = `Target Date: ${targetTime.toLocaleDateString()}`;
+                targetDateLabel.textContent = `Target Date: ${targetTime.toLocaleString()}`;
                 countdownContainer.appendChild(targetDateLabel);
             }
-        
+
             // Set an interval to update the countdown every second
             setInterval(() => {
                 const currentTime = new Date();
                 const timeRemaining = targetTime - currentTime;
-        
+
                 if (timeRemaining <= 0) {
                     countdownTime.textContent = "00:00:00";
                 } else {
                     countdownTime.textContent = Utils.formatCountdown(timeRemaining);
                 }
             }, 1000);
-        
+
             return countdownContainer;
         }
     };
@@ -510,6 +510,25 @@
                 date.getFullYear() === today.getFullYear()
             );
         },
+
+        convertToLocalTimezone: function (fromTimezone, toTimezone, targetHour, targetMinute) {
+            // Create a date string for the specified time in the source timezone
+            const sourceDate = new Date();
+    
+            // Set the time to the specific hour and minute in the source timezone
+            sourceDate.setUTCHours(targetHour - 3, targetMinute, 0, 0); // Moscow (UTC+3)
+    
+            // Convert the source time to the target timezone
+            const targetTimeString = new Intl.DateTimeFormat("en-US", {
+                timeZone: toTimezone,
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false // Use 24-hour format for clarity
+            }).format(sourceDate);
+    
+            return targetTimeString;
+        }
     }
 
     // ==Page Handlers==
@@ -1523,6 +1542,9 @@
         } else if (Utils.checkPage('form_page')) {
             handleFormPage(profile);
         }
+
+        const moscowMidnight = TimeHelpers.convertToLocalTimezone('Europe/Moscow', 'America/New_York', 20, 0);
+        console.log(moscowMidnight);
 
         StorageManager.saveProfile(profile);
     }
