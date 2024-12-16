@@ -29,6 +29,7 @@
         AVAILABLE_VIDEO_FORMATS: ["1080", "720", "4K", "2160"],
         URL_DELAY: 1000,
         SIZE_UNITS: ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+        TARGET_RATIOS: [0.3, 0.5, 1.0],
         STORAGE_KEYS: {
             PROFILE: 'profile',
             SETTINGS: 'settings',
@@ -102,8 +103,8 @@
             }
         },
 
-        calculateNextRatio(currentRatio, targetRatios = [0.3, 0.5, 1.0]) {
-            return targetRatios.find(ratio => ratio > currentRatio) || currentRatio; // Default to currentRatio if no higher target exists
+        calculateNextRatio(currentRatio) {
+            return Config.TARGET_RATIOS.find(ratio => ratio > currentRatio) || currentRatio;
         },
 
         parseSize(valueWithUnit) {
@@ -116,6 +117,23 @@
             } else {
                 return null;
             }
+        },
+
+        formatBytes(valueInBytes) {
+            let unitIndex = 0;
+            let value = valueInBytes;
+
+            // Loop to find the highest unit that's >= 1
+            while (value >= 1024 && unitIndex < Config.SIZE_UNITS.length - 1) {
+                value /= 1024;
+                unitIndex++;
+            }
+
+            // Use your existing utility method to convert to the appropriate unit
+            const formattedValue = Number(value.toFixed(2));
+            const unit = Config.SIZE_UNITS[unitIndex];
+
+            return `${formattedValue} ${unit}`;
         }
     };
 
@@ -153,7 +171,6 @@
             return profile;
         }
     };
-
 
     // ==Data Structures==
     class Torrent {
@@ -237,7 +254,6 @@
 
         calculateRequiredUpload(targetRatio) {
             const { uploaded, downloaded } = this.stats;
-            console.log(uploaded / downloaded, this.stats.ratio);
 
             if ((uploaded / downloaded) >= targetRatio) {
                 Utils.logDebug(`Upload quota already reached for target ratio ${targetRatio}`);
@@ -250,7 +266,6 @@
             return Math.max(0, requiredUpload); // Ensure non-negative result
         }
     }
-
 
     // ==Storage Manager==
     const StorageManager = {
@@ -457,7 +472,7 @@
 
         // Calculate next ratio and required upload
         const nextRatio = Utils.calculateNextRatio(profile.stats.ratio);
-        const requiredUpload = profile.calculateRequiredUpload(nextRatio);
+        const requiredUpload = Utils.formatBytes(profile.calculateRequiredUpload(nextRatio));
 
         Utils.logDebug('Next ratio and upload requirements:', {
             nextRatio,
@@ -762,34 +777,6 @@
         });
 
         return todayItems.length;
-    }
-
-    function convertSizeBetweenUnits(value, fromUnit, toUnit) {
-        const fromIndex = SIZE_UNITS.indexOf(fromUnit);
-        const toIndex = SIZE_UNITS.indexOf(toUnit);
-
-        if (fromIndex === -1 || toIndex === -1) {
-            throw new Error('Invalid unit provided');
-        }
-
-        const bytes = value * Math.pow(1024, fromIndex);
-        const convertedValue = bytes / Math.pow(1024, toIndex);
-
-        return Number(convertedValue.toFixed(2));
-    }
-
-    function formatBytes(value) {
-        let unitIndex = 0;
-
-        while (value >= 1024 && unitIndex < SIZE_UNITS.length - 1) {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        const formattedValue = Number(value.toFixed(2));
-        const unit = SIZE_UNITS[unitIndex];
-
-        return `${formattedValue} ${unit}`;
     }
 
     function resetAllData() {
