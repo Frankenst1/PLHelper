@@ -134,6 +134,15 @@
             const unit = Config.SIZE_UNITS[unitIndex];
 
             return `${formattedValue} ${unit}`;
+        },
+
+        formatCountdown(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
     };
 
@@ -455,6 +464,32 @@
         `;
 
             return statsContainer;
+        },
+
+        generateCountdownPanel(targetTime) {
+            const countdownContainer = document.createElement('div');
+            countdownContainer.className = 'countdown-panel';
+
+            const countdownLabel = document.createElement('p');
+            countdownLabel.textContent = "Time remaining until next update:";
+            countdownContainer.appendChild(countdownLabel);
+
+            const countdownTime = document.createElement('span');
+            countdownContainer.appendChild(countdownTime);
+
+            // Set an interval to update the countdown every second
+            setInterval(() => {
+                const currentTime = new Date();
+                const timeRemaining = targetTime - currentTime;
+
+                if (timeRemaining <= 0) {
+                    countdownTime.textContent = "00:00:00";
+                } else {
+                    countdownTime.textContent = Utils.formatCountdown(timeRemaining);
+                }
+            }, 1000);
+
+            return countdownContainer;
         }
     };
 
@@ -473,6 +508,14 @@
         // Calculate next ratio and required upload
         const nextRatio = Utils.calculateNextRatio(profile.stats.ratio);
         const requiredUpload = Utils.formatBytes(profile.calculateRequiredUpload(nextRatio));
+
+        // Define the target time for the countdown (next update, for example)
+        const targetTime = new Date();
+        targetTime.setHours(24, 0, 0, 0);  // Set the target time to midnight of the next day
+
+        // Create the countdown panel
+        const countdownPanel = UIHelpers.generateCountdownPanel(targetTime);
+        wrapper.appendChild(countdownPanel);
 
         Utils.logDebug('Next ratio and upload requirements:', {
             nextRatio,
