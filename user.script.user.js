@@ -62,15 +62,6 @@
             return Number((bytes / Math.pow(1024, toIndex)).toFixed(2));
         },
 
-        isToday(date) {
-            const today = new Date();
-            return (
-                date.getDate() === today.getDate() &&
-                date.getMonth() === today.getMonth() &&
-                date.getFullYear() === today.getFullYear()
-            );
-        },
-
         parseIdFromUrl(url, type) {
             let id;
             switch (type) {
@@ -466,32 +457,60 @@
             return statsContainer;
         },
 
-        generateCountdownPanel(targetTime) {
+        generateCountdownPanel(targetTime, showTargetDate = false, countdownLabelText = "Time remaining:") {
             const countdownContainer = document.createElement('div');
             countdownContainer.className = 'countdown-panel';
-
+        
             const countdownLabel = document.createElement('p');
-            countdownLabel.textContent = "Time remaining until next update:";
+            countdownLabel.textContent = countdownLabelText; // Use the custom text here
             countdownContainer.appendChild(countdownLabel);
-
+        
             const countdownTime = document.createElement('span');
             countdownContainer.appendChild(countdownTime);
-
+        
+            // Optional: Display the target date if `showTargetDate` is true
+            if (showTargetDate) {
+                const targetDateLabel = document.createElement('p');
+                targetDateLabel.textContent = `Target Date: ${targetTime.toLocaleDateString()}`;
+                countdownContainer.appendChild(targetDateLabel);
+            }
+        
             // Set an interval to update the countdown every second
             setInterval(() => {
                 const currentTime = new Date();
                 const timeRemaining = targetTime - currentTime;
-
+        
                 if (timeRemaining <= 0) {
                     countdownTime.textContent = "00:00:00";
                 } else {
                     countdownTime.textContent = Utils.formatCountdown(timeRemaining);
                 }
             }, 1000);
-
+        
             return countdownContainer;
         }
     };
+
+    const TimeHelpers = {
+        // Function to calculate the next Free Leech event time (e.g., every Sunday at midnight)
+        getNextFreeLeechTime() {
+            const now = new Date();
+            const nextSunday = new Date(now);
+            nextSunday.setDate(now.getDate() + (7 - now.getDay()));  // Get next Sunday
+            nextSunday.setHours(0, 0, 0, 0);  // Set to midnight on Sunday
+
+            return nextSunday;
+        },
+
+        isToday(date) {
+            const today = new Date();
+            return (
+                date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear()
+            );
+        },
+    }
 
     // ==Page Handlers==
     function handleProfilePage(profile) {
@@ -509,13 +528,10 @@
         const nextRatio = Utils.calculateNextRatio(profile.stats.ratio);
         const requiredUpload = Utils.formatBytes(profile.calculateRequiredUpload(nextRatio));
 
-        // Define the target time for the countdown (next update, for example)
-        const targetTime = new Date();
-        targetTime.setHours(24, 0, 0, 0);  // Set the target time to midnight of the next day
-
-        // Create the countdown panel
-        const countdownPanel = UIHelpers.generateCountdownPanel(targetTime);
-        wrapper.appendChild(countdownPanel);
+        // TODO: Free leech countdown should be shown on every page.
+        const targetFreeLeechTime = TimeHelpers.getNextFreeLeechTime();
+        const freeLeechPanel = UIHelpers.generateCountdownPanel(targetFreeLeechTime, true, "Next freeleech:");
+        wrapper.appendChild(freeLeechPanel);
 
         Utils.logDebug('Next ratio and upload requirements:', {
             nextRatio,
