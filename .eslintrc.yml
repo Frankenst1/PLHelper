@@ -10,5 +10,6 @@ globals: {
   'GM_setValue': 'readonly',
   'GM_deleteValue': 'readonly',
   'GM_openInTab': 'readonly',
-  'GM_addStyle': 'readonly'
+  'GM_addStyle': 'readonly',
+  'GM_listValues': 'readonly',
 }
