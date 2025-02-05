@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
+// @version      2.0.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -58,7 +58,8 @@
         torrentPageTopic: "#main_content_wrap .nav a:nth-last-of-type(2)",
         downloadButton: '#tor-reged .dl-stub.dl-link',
         logo: '#logo',
-        logoTd: '#logo-td'
+        logoTd: '#logo-td',
+        profileName: 'a[href*="profile.php"]',
     };
 
     // ==Data Structures==
@@ -353,7 +354,13 @@
         },
 
         loadProfile() {
-            const rawProfile = this.get(Config.STORAGE_KEYS.PROFILE, new Profile());
+            const rawProfile = this.get(Config.STORAGE_KEYS.PROFILE);
+            if(!rawProfile)
+            {
+                // Redirect to the profile page to update the stats
+                window.location.href = document.querySelector(SELECTORS.profileName).href;
+                return new Profile();
+            }
             return new Profile(rawProfile.preferences, rawProfile.stats, rawProfile.downloadedTorrents);
         },
 
@@ -1144,8 +1151,7 @@
             resetButton.addEventListener('click', () => {
                 if (confirm('Are you sure you want to reset all data to default?')) {
                     StorageManager.clearTampermonkeyStorage();
-                    const profileUrl = document.querySelector("#page_header > div.topmenu > table > tbody > tr > td:nth-child(1) > a:nth-child(2)").href;
-                    window.location.href = profileUrl; // Redirect to the profile page to update the stats
+                    window.location.href = document.querySelector(SELECTORS.profileName).href;
                 }
             });
             settingsPane.appendChild(resetButton);
