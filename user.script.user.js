@@ -1243,15 +1243,25 @@
                 });
             }
 
-            // Add button to add torrent to list
+            // Add button to toggle torrent in the list
             const addButton = document.createElement('button');
-            addButton.textContent = 'Add to List';
+            const isInList = profile.torrentList.some(t => t.id === torrent.id);
+            addButton.textContent = isInList ? 'Remove from List' : 'Add to List';
+
             addButton.addEventListener('click', () => {
-                torrent.savedDate = new Date().toString();
-                profile.addTorrentToList(torrent);
+                if (isInList) {
+                    profile.removeTorrentFromList(torrent.id);
+                    addButton.textContent = 'Add to List';
+                    alert('Torrent removed from list!');
+                } else {
+                    torrent.savedDate = new Date().toString();
+                    profile.addTorrentToList(torrent);
+                    addButton.textContent = 'Remove from List';
+                    alert('Torrent added to list!');
+                }
                 StorageManager.saveProfile(profile);
-                alert('Torrent added to list!');
             });
+
             document.querySelector(SELECTORS.torrentPageTitle).appendChild(addButton);
         }
     };
