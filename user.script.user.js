@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
+// @version      2.1.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -14,6 +14,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 // TODO: add ability to start downloading the torrents as well?
@@ -275,7 +276,7 @@
 
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
-        
+
         static toSnakeCase(str) {
             return str
                 .trim() // Remove leading and trailing whitespace
@@ -411,7 +412,7 @@
 
             // Loop through each key and get the corresponding value
             keys.forEach(key => {
-                storage[key] = this.get(key);
+                storage[key] = StorageManager.get(key);
             });
 
             const data = JSON.stringify(storage); // Convert the storage data to JSON
@@ -446,6 +447,7 @@
                     const message = 'Tampermonkey storage data imported successfully!';
                     Utils.logDebug(message);
                     alert(message);
+                    window.location.reload();
 
                 } catch (error) {
                     console.error('Error importing Tampermonkey storage data:', error);
@@ -462,10 +464,11 @@
 
             // Loop through each key and delete it
             keys.forEach(key => {
-                this.delete(key);
+                StorageManager.delete(key);
             });
 
             alert('All Tampermonkey storage data has been cleared!');
+            window.location.reload();
         }
     };
 
@@ -1109,8 +1112,8 @@
 
             try {
                 profile.updateStatsFromProfilePage();
-                if(profile.passKey !== undefined && document.querySelector('#passkey-val').innerText !== profile.passKey){
-                    if(!confirm("Different passkey detected, please verify if you have the correct user logged in. If not, please log in with the correct user. Do you want to update the passkey?")){
+                if (profile.passKey !== undefined && document.querySelector('#passkey-val').innerText !== profile.passKey) {
+                    if (!confirm("Different passkey detected, please verify if you have the correct user logged in. If not, please log in with the correct user. Do you want to update the passkey?")) {
                         return;
                     }
                 }
@@ -1243,15 +1246,27 @@
                 });
             }
 
-            // Add button to add torrent to list
+            // Add button to toggle torrent in the list
             const addButton = document.createElement('button');
-            addButton.textContent = 'Add to List';
+
+            let isInList = profile.torrentList.some(t => t.id === torrent.id);
+            addButton.textContent = isInList ? 'Remove from List' : 'Add to List';
+
             addButton.addEventListener('click', () => {
-                torrent.savedDate = new Date().toString();
-                profile.addTorrentToList(torrent);
+                isInList = profile.torrentList.some(t => t.id === torrent.id);
+                if (isInList) {
+                    profile.removeTorrentFromList(torrent.id);
+                    addButton.textContent = 'Add to List';
+                    alert('Torrent removed from list!');
+                } else {
+                    torrent.savedDate = new Date().toString();
+                    profile.addTorrentToList(torrent);
+                    addButton.textContent = 'Remove from List';
+                    alert('Torrent added to list!');
+                }
                 StorageManager.saveProfile(profile);
-                alert('Torrent added to list!');
             });
+
             document.querySelector(SELECTORS.torrentPageTitle).appendChild(addButton);
         }
     };
@@ -1376,6 +1391,22 @@
         }
     };
 
+    class MenuItems {
+        static registerAllMenuItems() {
+            GM_registerMenuCommand('Export settings', StorageManager.exportTampermonkeyStorage);
+            GM_registerMenuCommand('Import settings', () => {
+
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.json';
+                fileInput.addEventListener('change', StorageManager.importTampermonkeyStorage);
+                fileInput.click();
+
+            });
+            GM_registerMenuCommand('Reset all data', StorageManager.clearTampermonkeyStorage);
+        }
+    }
+
     // ==Main==
     function initializeScript() {
         try {
@@ -1428,6 +1459,8 @@
             UIHelpers.showRemainingDownloads(profile);
             SettingsPane.createSettingsPane();
             UIHelpers.createBackgroundTasksPane();
+
+            MenuItems.registerAllMenuItems();
         } catch (error) {
             console.error('Error initializing script:', error);
             alert('An error occurred while initializing the script. Please check the console for details.');
