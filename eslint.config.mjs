@@ -15,7 +15,8 @@ export default [
                 GM_setValue: "readonly",
                 GM_deleteValue: "readonly",
                 GM_listValues: "readonly",
-                GM_openInTab: "readonly"
+                GM_openInTab: "readonly",
+                GM_registerMenuCommand: "readonly",
             },
         },
         plugins: {

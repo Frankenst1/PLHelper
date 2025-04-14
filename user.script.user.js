@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0
+// @version      2.2.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -51,7 +51,9 @@
             PROFILE: 'profile',
             SETTINGS: 'settings'
         },
-        DEBUG_MODE: true
+        DEBUG_MODE: true,
+        ELEMENT_NAME_PREFIX: 'PLHelper_',
+        DEFAULT_BATCH_OPENER_STATE: true,
     };
 
     // Define constants for frequently used selectors
@@ -396,7 +398,8 @@
         static loadSettings() {
             const rawSettings = this.get(Config.STORAGE_KEYS.SETTINGS, {
                 hideDownloadedTorrents: false,
-                preferredFormats: Config.AVAILABLE_VIDEO_FORMATS
+                preferredFormats: Config.AVAILABLE_VIDEO_FORMATS,
+                batchOpenerState: Config.DEFAULT_BATCH_OPENER_STATE // Default value
             });
             // No transformation needed unless settings become more complex
             return rawSettings;
@@ -658,7 +661,7 @@
 
     // ==UI Helpers==
     class UIHelpers {
-        static addTorrentOpenerUI(torrents, selector, legendText = null) {
+        static addTorrentOpenerUI(torrents, element, legendText = null) {
             const container = document.createElement('fieldset');
 
             if (legendText) {
@@ -691,7 +694,7 @@
                 container.appendChild(button);
             }
 
-            selector.appendChild(container);
+            element.appendChild(container);
         }
 
         static generateBasicTable(headers, rows, tableClass = 'bCenter borderless', cellSpacing = '1') {
@@ -1030,17 +1033,21 @@
         }
 
         static markPageAsDownloaded(isDownloaded) {
-            const pageContainer = document.getElementById('page_container');
-            const torReged = document.getElementById('tor-reged');
+            const container = document.querySelector('.post_body');
+            const torReged = document.querySelectorAll('#tor-reged td');
+            const bgColor = isDownloaded ? 'crimson' : 'darkseagreen';
+            const txtColor = isDownloaded ? 'white' : 'black';
 
             // Check if elements exist before trying to modify their styles
-            if (pageContainer) {
-                pageContainer.style.backgroundColor = isDownloaded ? 'red' : 'green';
+            if (container) {
+                container.style.backgroundColor = bgColor;
+                container.style.color = txtColor;
             }
 
-            if (torReged) {
-                torReged.style.backgroundColor = isDownloaded ? 'red' : 'green';
-            }
+            torReged.forEach((el) => {
+                el.style.background = bgColor;
+                el.style.color = txtColor;
+        });
         }
 
         static markTorrentRowAsDownloaded(torrent) {
@@ -1105,6 +1112,36 @@
     };
 
     // ==Page Handlers==
+    class TrackerHelpers {
+        static getTrackerTopicList() {
+            if (!Utils.checkPage('tracker_page')) {
+                console.error('Unable to fetch topic ids from current page!');
+                return
+            }
+
+            const topics = [];
+            document.querySelectorAll('#fs-main option').forEach((option) => {
+                if (option.value) {
+                    topics.push(new TorrentTopic(option.value, option.textContent.trim()));
+                }
+            });
+
+            return topics;
+        }
+
+        // This function returns a list op tracker topics filtered by either an array of ids or an array of titles.
+        // If no filter is provided, it returns all topics.
+        static getFilteredTrackerTopicIds(filter = null) {
+            const topics = this.getTrackerTopicList();
+            if (!filter) return topics;
+            if (Array.isArray(filter)) {
+                return topics.filter(topic => filter.some(f => topic.id === f || topic.title.includes(f)));
+            } else {
+                console.error('Invalid filter type. Expected an array.');
+                return [];
+            }
+        }
+    }
     class PageHandlers {
         static handleProfilePage(profile) {
             const wrapper = document.querySelector(SELECTORS.profilePage);
@@ -1174,6 +1211,11 @@
                 return acc;
             }, {});
 
+            // Add torrents that don't match any preferred format to the "undefined format" category
+            filteredTorrentsByFormat["Unknown Format"] = allTorrents.filter(torrent =>
+                !Config.AVAILABLE_VIDEO_FORMATS.some(format => torrent.title.includes(format))
+            );
+
             // Fetch all topics and map them to TorrentTopic instances
             const topicElements = document.querySelectorAll("#tor-tbl > tbody > tr > td:nth-child(3) > a");
             const torrentTopics = Array.from(topicElements).map(el => {
@@ -1185,14 +1227,37 @@
 
             // Create a map of filtered torrents grouped by topic title
             const filteredTorrentsByTopic = torrentTopics.reduce((acc, topic) => {
-                // Filter torrents by the current topic's ID and preferred formats
-                acc[topic.title] = allTorrents.filter(torrent => torrent.topic?.id === topic.id && preferredFormats.some(format => torrent.title.includes(format)));
+                // Filter torrents by the current topic's ID
+                acc[topic.title] = allTorrents.filter(torrent => {
+                    const hasPreferredFormat = preferredFormats.some(format => torrent.title.includes(format));
+                    const isMatchingTopic = torrent.topic?.id === topic.id;
+
+                    // Include torrents with preferred formats or unknown formats
+                    return isMatchingTopic && (hasPreferredFormat || !Config.AVAILABLE_VIDEO_FORMATS.some(format => torrent.title.includes(format)));
+                });
                 return acc;
             }, {});
 
-            // Add torrent opener UI
-            UIHelpers.addTorrentOpenerUI(filteredTorrentsByFormat, document.getElementById('search_opt'), "Video Format");
-            UIHelpers.addTorrentOpenerUI(filteredTorrentsByTopic, document.getElementById('search_opt'), "Topic");
+
+            // Create details element with name "batch open torrents" and add both UI openers to that one.
+            const batchOpenWrapper = document.createElement('details');
+            batchOpenWrapper.classList.add('fieldsets');
+            batchOpenWrapper.style.backgroundColor = '#B7C0C5';
+
+            // Use the saved setting to determine the initial state
+            if (settings.batchOpenerState) {
+                batchOpenWrapper.setAttribute('open', '');
+            }
+
+            batchOpenWrapper.id = Config.ELEMENT_NAME_PREFIX + 'batch-opener';
+            const batchOpenSummary = document.createElement('summary');
+            batchOpenSummary.textContent = 'Batch open torrents';
+            batchOpenWrapper.appendChild(batchOpenSummary);
+            batchOpenWrapper.appendChild(document.createElement('hr'));
+            document.querySelector("#main_content_wrap > table > tbody > tr:nth-child(1) > td:nth-child(1)").prepend(batchOpenWrapper);
+
+            UIHelpers.addTorrentOpenerUI(filteredTorrentsByFormat, batchOpenWrapper, "Video Format");
+            UIHelpers.addTorrentOpenerUI(filteredTorrentsByTopic, batchOpenWrapper, "Topic");
         }
 
         static handleFormPage(profile) {
@@ -1228,6 +1293,9 @@
             const downloadButton = document.querySelector(SELECTORS.downloadButton);
             if (downloadButton) {
                 downloadButton.addEventListener('click', (e) => {
+                    // Fetch profile again, in case other tab modified it
+                    profile = StorageManager.loadProfile();
+
                     torrent.downloadDate = new Date().toString();
                     if (torrent.isDownloaded(profile.downloadedTorrents)) {
                         const downloadConfirmed = confirm('Torrent is already downloaded. Download anyway?');
@@ -1238,11 +1306,20 @@
                             return;
                         }
                     }
-
                     // Add the torrent and save the profile
                     profile.addDownloadedTorrent(torrent);
                     StorageManager.saveProfile(profile);
                     UIHelpers.markPageAsDownloaded(true);
+
+                    // TODO: Add ability to check if download succeeded. If not, don't add to profile/remove from list.
+
+                    // Update the counter for downloaded torrents
+                    const downloadsRemainingElement = document.querySelector('#plhelper-header-section p.cat');
+                    if (downloadsRemainingElement) {
+                        const remainingQuota = QuotaManager.calculateRemainingQuota(profile);
+                        downloadsRemainingElement.innerText = `Downloads remaining: ${remainingQuota}`;
+                        downloadsRemainingElement.style.color = remainingQuota <= 0 ? 'red' : (remainingQuota < 10 ? 'orange' : 'green');
+                    }
                 });
             }
 
@@ -1253,6 +1330,8 @@
             addButton.textContent = isInList ? 'Remove from List' : 'Add to List';
 
             addButton.addEventListener('click', () => {
+                // Fetch profile again to prevent overwriting
+                profile = StorageManager.loadProfile();
                 isInList = profile.torrentList.some(t => t.id === torrent.id);
                 if (isInList) {
                     profile.removeTorrentFromList(torrent.id);
@@ -1275,6 +1354,14 @@
     class SettingsPane {
         static createSettingsPane() {
             const settingsPane = UIHelpers.createPane('settings-pane', 'Settings', { top: '30px', right: '10px' });
+
+            // Add warning message
+            const warningMessage = document.createElement('p');
+            warningMessage.textContent = 'Warning: Changes will not take effect until you click the "Save" button!';
+            warningMessage.style.color = 'red';
+            warningMessage.style.fontWeight = 'bold';
+            warningMessage.style.display = 'none'; // Initially hidden
+            settingsPane.appendChild(warningMessage);
 
             // Video Formats Fieldset
             const videoFormatsFieldset = document.createElement('fieldset');
@@ -1306,14 +1393,31 @@
 
             // Hide Downloaded Torrents
             const hideDownloadedLabel = document.createElement('label');
-            hideDownloadedLabel.textContent = 'Hide Downloaded Torrents:';
+            hideDownloadedLabel.textContent = 'Hide Downloaded Torrents';
             const hideDownloadedInput = document.createElement('input');
             hideDownloadedInput.type = 'checkbox';
             hideDownloadedInput.name = 'hideDownloadedTorrents';
             generalSettingsFieldset.appendChild(hideDownloadedInput);
             generalSettingsFieldset.appendChild(hideDownloadedLabel);
 
+            // Batch Opener State
+            const batchOpenerLabel = document.createElement('label');
+            batchOpenerLabel.textContent = 'Show Batch Opener';
+            const batchOpenerInput = document.createElement('input');
+            batchOpenerInput.type = 'checkbox';
+            batchOpenerInput.name = 'batchOpenerState';
+            generalSettingsFieldset.appendChild(batchOpenerInput);
+            generalSettingsFieldset.appendChild(batchOpenerLabel);
+
             settingsPane.appendChild(generalSettingsFieldset);
+
+            // Add event listeners to inputs to show the warning when changes are made
+            const inputs = settingsPane.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.addEventListener('change', () => {
+                    warningMessage.style.display = 'block';
+                });
+            });
 
             // Load saved settings
             const savedSettings = StorageManager.loadSettings();
@@ -1324,6 +1428,7 @@
                 }
             });
             hideDownloadedInput.checked = savedSettings.hideDownloadedTorrents;
+            batchOpenerInput.checked = savedSettings.batchOpenerState;
 
             const buttonContainer = document.createElement('div');
             buttonContainer.classList.add('cat');
@@ -1337,7 +1442,8 @@
                 const newSettings = {
                     ...savedSettings,
                     preferredFormats: selectedFormats,
-                    hideDownloadedTorrents: hideDownloadedInput.checked
+                    hideDownloadedTorrents: hideDownloadedInput.checked,
+                    batchOpenerState: batchOpenerInput.checked
                 };
                 StorageManager.saveSettings(newSettings);
                 alert('Settings saved!');
@@ -1407,9 +1513,43 @@
         }
     }
 
+    // Add top banner for DEV mode or debug mode
+    function addTopBanner() {
+        const bannerContainer = document.createElement('div');
+        bannerContainer.style.position = 'fixed';
+        bannerContainer.style.top = '0';
+        bannerContainer.style.left = '0';
+        bannerContainer.style.width = '100%';
+        bannerContainer.style.zIndex = '10000';
+        bannerContainer.style.textAlign = 'center';
+        bannerContainer.style.padding = '10px';
+        bannerContainer.style.fontWeight = 'bold';
+        bannerContainer.style.color = 'white';
+
+        if (/dev/i.test(GM_info.script.version)) {
+            const devBanner = document.createElement('div');
+            devBanner.textContent = 'DEV MODE ACTIVE';
+            devBanner.style.backgroundColor = 'red';
+            bannerContainer.appendChild(devBanner);
+        }
+
+        if (Config.DEBUG_MODE) {
+            const debugBanner = document.createElement('div');
+            debugBanner.textContent = 'DEBUG MODE ENABLED';
+            debugBanner.style.backgroundColor = 'orange';
+            bannerContainer.appendChild(debugBanner);
+        }
+
+        if (bannerContainer.children.length > 0) {
+            document.body.style.marginTop = `${bannerContainer.offsetHeight}px`; // Adjust page margin
+            document.body.prepend(bannerContainer);
+        }
+    }
+
     // ==Main==
     function initializeScript() {
         try {
+            addTopBanner();
             const profile = StorageManager.loadProfile();
             const profileLink = document.querySelector(SELECTORS.profileName);
             if (profileLink && profileLink.href.includes('register')) {
