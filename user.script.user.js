@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      2.2.0
+// @version      2.3.0
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -17,7 +17,6 @@
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
-// TODO: add ability to start downloading the torrents as well?
 (function () {
     'use strict';
 
@@ -106,12 +105,13 @@
                 downloaded: 0,
                 soloUpload: 0,
                 bonus: 0,
-                lastUpdated: new Date().toString()
+                lastUpdated: undefined
             },
             downloadedTorrents = [],
             torrentList = [],
             version = scriptVersion,
-            passKey = ''
+            passKey = '',
+            username = ''
         ) {
             this.preferences = preferences;
             this.stats = stats;
@@ -119,6 +119,7 @@
             this.torrentList = torrentList;
             this.version = version;
             this.passKey = passKey;
+            this.username = username;
         }
 
         addDownloadedTorrent(torrent) {
@@ -182,6 +183,15 @@
             // Calculate the required upload
             const requiredUpload = targetRatio * downloaded - uploaded;
             return Math.max(0, requiredUpload); // Ensure non-negative result
+        }
+
+        needsStatsUpdate(lastServerReset) {
+            // Returns true if stats are missing or outdated
+            return (
+                !this.stats ||
+                !this.stats.lastUpdated ||
+                (new Date(this.stats.lastUpdated) < lastServerReset)
+            );
         }
     }
 
@@ -292,6 +302,31 @@
                 .trim() // Remove leading and trailing whitespace
                 .replace(/\s+/g, ' '); // Replace multiple spaces with a single space
         }
+
+        static isLoggedIn() {
+            // Returns false if the login form is present, true otherwise
+            return document.querySelector('form[action="/forum/login.php"]') === null;
+        }
+
+        static getCurrentUsername() {
+            if (!this.isLoggedIn()) return '';
+            // Try to get username from profile link
+            const profileLink = document.querySelector('a[href*="profile.php?"]');
+            if (profileLink) {
+                // Usually the username is the text content
+                return profileLink.textContent.trim();
+            }
+            return '';
+        }
+
+        static updateProfileStats() {
+            // Only redirect if not on the profile page
+            if (!Utils.checkPage('profile_page')) {
+                // Store the current URL to return after stats update
+                sessionStorage.setItem('plhelper_redirect_back', window.location.href);
+                window.location.href = document.querySelector(SELECTORS.profileName).href;
+            }
+        }
     }
 
     // ==Migration (1.X -> 2.X)==
@@ -380,19 +415,88 @@
             GM_deleteValue(key);
         }
 
-        static loadProfile() {
-            const rawProfile = this.get(Config.STORAGE_KEYS.PROFILE);
-            if (!rawProfile) {
-                // Redirect to the profile page to update the stats since we don't have any profile.
-                window.location.href = document.querySelector(SELECTORS.profileName).href;
-                return new Profile();
+        static getAllProfiles() {
+            // Returns an object: { passKey: profileObj, ... }
+            return GM_getValue('profiles', {});
+        }
+
+        static saveAllProfiles(profiles) {
+            Utils.logDebug("Saving all profiles: ", profiles);
+            GM_setValue('profiles', profiles);
+        }
+
+        static getCurrentPassKey() {
+            // Try to get passkey from profile page, else from stored profile
+            const passkeyEl = document.querySelector('#passkey-val');
+            if (passkeyEl) return passkeyEl.innerText;
+            // fallback: try to get from loaded profile
+            const profiles = this.getAllProfiles();
+            const usernames = Object.values(profiles).map(p => p.username);
+            const currentUsername = Utils.getCurrentUsername();
+            for (const pk in profiles) {
+                if (profiles[pk].username === currentUsername) return pk;
             }
-            return new Profile(rawProfile.preferences, rawProfile.stats, rawProfile.downloadedTorrents, rawProfile.torrentList, rawProfile.passKey);
+            return null;
+        }
+
+        static getCurrentProfileKey() {
+            // Prefer passkey, fallback to username
+            const passKey = this.getCurrentPassKey();
+            if (passKey) return passKey;
+            const username = Utils.getCurrentUsername();
+            if (!username) return null;
+            // fallback: find by username
+            const profiles = this.getAllProfiles();
+            for (const pk in profiles) {
+                if (profiles[pk].username === username) return pk;
+            }
+            return null;
+        }
+
+        static loadProfile() {
+            const profiles = this.getAllProfiles();
+            Utils.logDebug("Stored profiles: ", profiles);
+
+            // Prevent profile creation if not logged in
+            if (!Utils.isLoggedIn()) {
+                Utils.logDebug("User is not logged in, not creating/loading profile.");
+                return new Profile(); // Optionally, return null or a dummy profile
+            }
+
+            const key = this.getCurrentProfileKey();
+            if (!key || !profiles[key]) {
+                // Try to create new profile if possible
+                const username = Utils.getCurrentUsername();
+                if (!username) {
+                    // Can't create profile, redirect to profile page
+                    window.location.href = document.querySelector(SELECTORS.profileName).href;
+                    return new Profile();
+                }
+                // Try to get passkey if on profile page
+                const passKey = this.getCurrentPassKey() || '';
+                const newProfile = new Profile(undefined, undefined, [], [], scriptVersion, passKey, username);
+                profiles[passKey || username] = newProfile;
+                this.saveAllProfiles(profiles);
+                return newProfile;
+            }
+            const rawProfile = profiles[key];
+            return new Profile(
+                rawProfile.preferences,
+                rawProfile.stats,
+                rawProfile.downloadedTorrents,
+                rawProfile.torrentList,
+                rawProfile.version,
+                rawProfile.passKey,
+                rawProfile.username
+            );
         }
 
         static saveProfile(profile) {
             Utils.logDebug("Profile has been saved", profile);
-            this.set(Config.STORAGE_KEYS.PROFILE, profile);
+            const profiles = this.getAllProfiles();
+            const key = profile.passKey || profile.username;
+            profiles[key] = profile;
+            this.saveAllProfiles(profiles);
         }
 
         static loadSettings() {
@@ -661,13 +765,50 @@
 
     // ==UI Helpers==
     class UIHelpers {
-        static addTorrentOpenerUI(torrents, element, legendText = null) {
+        static addTorrentOpenerUI(torrents, element, legendText = null, options = {}) {
             const container = document.createElement('fieldset');
 
             if (legendText) {
                 const legend = document.createElement('legend');
                 legend.innerText = legendText;
                 container.appendChild(legend);
+            }
+
+            // Add "Open all pages" checkbox if requested
+            let openAllPagesCheckbox = null;
+            let stopAllPagesButton = null;
+            if (options.showOpenAllPagesCheckbox) {
+                openAllPagesCheckbox = document.createElement('input');
+                openAllPagesCheckbox.type = 'checkbox';
+                openAllPagesCheckbox.id = 'plhelper-open-all-pages';
+                openAllPagesCheckbox.style.marginRight = '5px';
+                const label = document.createElement('label');
+                label.textContent = 'Open all pages';
+                label.htmlFor = openAllPagesCheckbox.id;
+                container.appendChild(openAllPagesCheckbox);
+                container.appendChild(label);
+
+                // Add a "Stop" button to allow user to stop the batch process
+                stopAllPagesButton = document.createElement('button');
+                stopAllPagesButton.textContent = 'Stop opening all pages';
+                stopAllPagesButton.style.marginLeft = '10px';
+                stopAllPagesButton.style.color = 'red';
+                stopAllPagesButton.style.display = 'none';
+                stopAllPagesButton.addEventListener('click', () => {
+                    // Only stop pagination, not opening torrents
+                    sessionStorage.removeItem('plhelper_batch_open');
+                    openAllPagesCheckbox.checked = false;
+                    stopAllPagesButton.style.display = 'none';
+                });
+                container.appendChild(stopAllPagesButton);
+                container.appendChild(document.createElement('br'));
+
+                // Restore checked state if batch open is active
+                const batchOpenState = sessionStorage.getItem('plhelper_batch_open');
+                if (batchOpenState) {
+                    openAllPagesCheckbox.checked = true;
+                    stopAllPagesButton.style.display = '';
+                }
             }
 
             for (const [key, value] of Object.entries(torrents)) {
@@ -677,8 +818,10 @@
                 const button = document.createElement('button');
                 button.textContent = `Open "${key}" (${value.length})`;
                 button.addEventListener('click', () => {
+                    // Always open torrents in batch, regardless of "open all pages"
                     value.forEach((torrent, index) => {
                         setTimeout(() => {
+                            // If user stopped, only prevent pagination, not opening torrents
                             const percentage = Math.floor((index + 1) / value.length * 100);
                             Utils.logDebug(`Downloading ${index + 1}/${value.length} (${percentage}%) - ${torrent.pageUrl}`);
                             GM_openInTab(torrent.pageUrl);
@@ -689,12 +832,62 @@
                         }, index * Config.URL_DELAY);
                     });
                     UIHelpers.addProgressBarToTasksPane(`Opening torrents for "${key}"`, progressBar);
+
+                    // Store state if openAllPagesCheckbox is checked (for pagination)
+                    if (openAllPagesCheckbox && openAllPagesCheckbox.checked) {
+                        // Try to get search_id from next page button (if present)
+                        let searchId = null;
+                        const nextPageBtn = document.querySelector("#main_content_wrap > table > tbody > tr:nth-child(1) > td:nth-child(1) > p.small > b > a:last-of-type");
+                        if (nextPageBtn && nextPageBtn.href) {
+                            const match = nextPageBtn.href.match(/search_id=([A-Za-z0-9]+)/);
+                            if (match) searchId = match[1];
+                        }
+                        Utils.logDebug('Storing sessionStorage for batch open');
+                        sessionStorage.setItem('plhelper_batch_open', JSON.stringify({
+                            key,
+                            legendText,
+                            type: options.type || 'format',
+                            searchId
+                        }));
+                        if (stopAllPagesButton) stopAllPagesButton.style.display = '';
+                    } else {
+                        Utils.logDebug('Clearing sessionStorage for batch open');
+                        sessionStorage.removeItem('plhelper_batch_open');
+                        if (stopAllPagesButton) stopAllPagesButton.style.display = 'none';
+                    }
+
+                    // If openAllPagesCheckbox is checked, after all are opened, go to next page
+                    if (openAllPagesCheckbox && openAllPagesCheckbox.checked) {
+                        setTimeout(() => {
+                            // Only prevent pagination if user stopped, not opening torrents
+                            if (sessionStorage.getItem('plhelper_batch_open') === null) return;
+                            if (UIHelpers.goToNextTrackerPage()) {
+                                // Next page will auto-continue via sessionStorage
+                            } else {
+                                // No more pages, clear state
+                                Utils.logDebug('No more pages to open, clearing sessionStorage');
+                                sessionStorage.removeItem('plhelper_batch_open');
+                                if (stopAllPagesButton) stopAllPagesButton.style.display = 'none';
+                            }
+                        }, value.length * Config.URL_DELAY + 500);
+                    }
                 });
 
                 container.appendChild(button);
             }
 
             element.appendChild(container);
+        }
+
+        static goToNextTrackerPage() {
+            const nextPageBtn = document.querySelector("#main_content_wrap > table > tbody > tr:nth-child(1) > td:nth-child(1) > p.small > b > a:last-of-type");
+            if (nextPageBtn && isNaN(nextPageBtn.textContent.trim())) {
+                // The last link is not a page number, so it's likely "next"
+                nextPageBtn.click();
+                return true;
+            }
+            // Otherwise, no next page
+            return false;
         }
 
         static generateBasicTable(headers, rows, tableClass = 'bCenter borderless', cellSpacing = '1') {
@@ -1047,7 +1240,7 @@
             torReged.forEach((el) => {
                 el.style.background = bgColor;
                 el.style.color = txtColor;
-        });
+            });
         }
 
         static markTorrentRowAsDownloaded(torrent) {
@@ -1149,6 +1342,8 @@
 
             try {
                 profile.updateStatsFromProfilePage();
+                // Always update username and passkey if available
+                profile.username = Utils.getCurrentUsername();
                 if (profile.passKey !== undefined && document.querySelector('#passkey-val').innerText !== profile.passKey) {
                     if (!confirm("Different passkey detected, please verify if you have the correct user logged in. If not, please log in with the correct user. Do you want to update the passkey?")) {
                         return;
@@ -1256,8 +1451,9 @@
             batchOpenWrapper.appendChild(document.createElement('hr'));
             document.querySelector("#main_content_wrap > table > tbody > tr:nth-child(1) > td:nth-child(1)").prepend(batchOpenWrapper);
 
-            UIHelpers.addTorrentOpenerUI(filteredTorrentsByFormat, batchOpenWrapper, "Video Format");
-            UIHelpers.addTorrentOpenerUI(filteredTorrentsByTopic, batchOpenWrapper, "Topic");
+            // Add "Open all pages" checkbox only once (for the first opener)
+            UIHelpers.addTorrentOpenerUI(filteredTorrentsByFormat, batchOpenWrapper, "Video Format", { showOpenAllPagesCheckbox: true, type: 'format' });
+            UIHelpers.addTorrentOpenerUI(filteredTorrentsByTopic, batchOpenWrapper, "Topic", { type: 'topic' });
         }
 
         static handleFormPage(profile) {
@@ -1347,6 +1543,26 @@
             });
 
             document.querySelector(SELECTORS.torrentPageTitle).appendChild(addButton);
+        }
+
+        // Add a handler for the download page to remove torrent from downloaded list if redirected due to limit
+        static handleDownloadPage(profile) {
+            // Check if we are on /forum/dl.php?t=...
+            const match = window.location.pathname.match(/\/forum\/dl\.php/);
+            if (!match) return;
+
+            // Try to get the torrent id from the URL
+            const params = new URLSearchParams(window.location.search);
+            const torrentId = params.get('t');
+            if (!torrentId) return;
+
+            // Remove the torrent from downloadedTorrents if present
+            const found = profile.downloadedTorrents.find(t => t.id === torrentId);
+            if (found) {
+                profile.removeDownloadedTorrent(torrentId);
+                StorageManager.saveProfile(profile);
+                Utils.logDebug(`Removed torrent ${torrentId} from downloadedTorrents due to download redirect/limit.`);
+            }
         }
     };
 
@@ -1520,7 +1736,7 @@
         bannerContainer.style.top = '0';
         bannerContainer.style.left = '0';
         bannerContainer.style.width = '100%';
-        bannerContainer.style.zIndex = '10000';
+        //bannerContainer.style.zIndex = '10000';
         bannerContainer.style.textAlign = 'center';
         bannerContainer.style.padding = '10px';
         bannerContainer.style.fontWeight = 'bold';
@@ -1550,48 +1766,115 @@
     function initializeScript() {
         try {
             addTopBanner();
-            const profile = StorageManager.loadProfile();
-            const profileLink = document.querySelector(SELECTORS.profileName);
-            if (profileLink && profileLink.href.includes('register')) {
-                Utils.logDebug('Unable to run properly as user is not logged in. Setting stats update to bad value to trigger update.');
-                profile.stats.lastUpdated = null;
-                StorageManager.saveProfile(profile);
+            MenuItems.registerAllMenuItems();
+
+            // Prevent script from running if not logged in
+            if (!Utils.isLoggedIn()) {
+                Utils.logDebug('all profiles', StorageManager.getAllProfiles());
+                Utils.logDebug('User is not logged in. Exiting script initialization.');
                 return;
             }
 
+            const profile = StorageManager.loadProfile();
+            Utils.logDebug('Loaded profile:', profile);
+
+            // Migrate legacy profiles (no version field)
             if (profile.version === undefined) {
                 if (ProfileMigration.isLegacyProfile(profile)) {
                     // Migrating old 1.X data to newest 2.X data structure.
                     Utils.logDebug("Legacy profile detected. Migrating...");
                     const newProfile = ProfileMigration.convertOldProfileToNew(profile);
-                    StorageManager.clearTampermonkeyStorage();
                     StorageManager.saveProfile(newProfile);
                     window.location.reload();
                     return;
                 }
             }
 
-            if (profile.version !== scriptVersion) {
-                Utils.logDebug(`Version changed from ${profile.version} to ${scriptVersion}. Performing necessary updates.`);
-                profile.version = scriptVersion;
-                StorageManager.saveProfile(profile)
-            }
+            // Migrate profiles from versions before 2.3.0
+            if (profile.version && profile.version < "2.3.0") {
+                Utils.logDebug(`Migrating profile from version ${profile.version} to 2.3.0`);
 
-            const lastServerReset = TimeHelpers.calculateTimeSinceLastServerReset();
-            if (new Date(profile.stats.lastUpdated) < lastServerReset && !Utils.checkPage('profile_page')) {
-                alert('Profile stats are outdated. Please visit your profile page to update the stats.');
-                window.location.href = document.querySelector(SELECTORS.profileName).href;
+                // Ensure new properties are set
+                if (!profile.passKey) {
+                    // Try to get passKey from the page if possible
+                    const passkeyEl = document.querySelector('#passkey-val');
+                    if (passkeyEl) {
+                        profile.passKey = passkeyEl.innerText;
+                    } else {
+                        profile.passKey = '';
+                    }
+                }
+                if (!profile.username) {
+                    profile.username = Utils.getCurrentUsername() || '';
+                }
+
+                // Optionally, ensure preferences and stats have all required fields
+                if (!profile.preferences) profile.preferences = { hideDownloadedTorrents: false };
+                if (!profile.stats) profile.stats = { ratio: 0, uploaded: 0, downloaded: 0, soloUpload: 0, bonus: 0, lastUpdated: undefined };
+
+                profile.version = "2.3.0";
+                StorageManager.saveProfile(profile);
+                window.location.reload();
                 return;
             }
 
+            const lastServerReset = TimeHelpers.calculateTimeSinceLastServerReset();
+            // Redirect if profile is new (no stats yet) or stats are outdated
+            if (
+                profile.needsStatsUpdate(lastServerReset) &&
+                !Utils.checkPage('profile_page')
+            ) {
+                Utils.updateProfileStats();
+                return;
+            }
+
+            // Handle redirect-back after stats update on profile page
             if (Utils.checkPage('profile_page')) {
                 PageHandlers.handleProfilePage(profile);
+
+                // If redirected for stats update, go back to previous page
+                const redirectBackUrl = sessionStorage.getItem('plhelper_redirect_back');
+                if (redirectBackUrl) {
+                    sessionStorage.removeItem('plhelper_redirect_back');
+                    window.location.href = redirectBackUrl;
+                    return;
+                }
             } else if (Utils.checkPage('tracker_page')) {
+                const batchOpenState = sessionStorage.getItem('plhelper_batch_open');
+                if (batchOpenState) {
+                    const { key, searchId } = JSON.parse(batchOpenState);
+
+                    // If searchId is set, check if it matches the current page's searchId (if any)
+                    let currentSearchId = null;
+                    const urlMatch = window.location.href.match(/search_id=([A-Za-z0-9]+)/);
+                    if (urlMatch) currentSearchId = urlMatch[1];
+
+                    if (!searchId || searchId === currentSearchId) {
+                        // Wait for UI to render, then trigger the correct button
+                        setTimeout(() => {
+                            const button = Array.from(document.querySelectorAll('button')).find(btn =>
+                                btn.textContent.includes(`"${key}"`)
+                            );
+                            if (button) {
+                                button.click();
+                            } else {
+                                // No button found, clear state
+                                sessionStorage.removeItem('plhelper_batch_open');
+                            }
+                        }, 500);
+                    } else {
+                        // Search id does not match, clear state to prevent accidental batch open on unrelated tracker pages
+                        sessionStorage.removeItem('plhelper_batch_open');
+                    }
+                }
                 PageHandlers.handleTrackerPage(profile);
             } else if (Utils.checkPage('topic_page')) {
                 PageHandlers.handleTorrentPage(profile);
             } else if (Utils.checkPage('form_page')) {
                 PageHandlers.handleFormPage(profile);
+            } else if (window.location.pathname.match(/\/forum\/dl\.php/)) {
+                // Handle download redirect page (limit exceeded)
+                PageHandlers.handleDownloadPage(profile);
             }
 
             UIHelpers.createHeaderSection();
@@ -1599,8 +1882,6 @@
             UIHelpers.showRemainingDownloads(profile);
             SettingsPane.createSettingsPane();
             UIHelpers.createBackgroundTasksPane();
-
-            MenuItems.registerAllMenuItems();
         } catch (error) {
             console.error('Error initializing script:', error);
             alert('An error occurred while initializing the script. Please check the console for details.');
