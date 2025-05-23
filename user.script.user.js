@@ -97,7 +97,8 @@
     class Profile {
         constructor(
             preferences = {
-                hideDownloadedTorrents: false
+                hideDownloadedTorrents: false,
+                includeTodayInStats: true
             },
             stats = {
                 ratio: 0,
@@ -152,6 +153,18 @@
             const downloaded = Utils.parseSize(document.querySelector('#u_down_total span.editable.bold')?.textContent);
             const soloUpload = Utils.parseSize(document.querySelector('#u_up_release span.editable.bold')?.textContent);
             const bonus = Utils.parseSize(document.querySelector('#u_up_bonus span.editable.bold')?.textContent);
+
+            const uploadedToday = Utils.parseSize(document.querySelector('table.ratio > tbody > tr:nth-child(3) > td:nth-child(3)')?.textContent);
+            const downloadedToday = Utils.parseSize(document.querySelector('table.ratio > tbody > tr:nth-child(2) > td:nth-child(3)')?.textContent);
+            const soloUploadToday = Utils.parseSize(document.querySelector('table.ratio > tbody > tr:nth-child(4) > td:nth-child(3)')?.textContent);
+            const bonusToday = Utils.parseSize(document.querySelector('table.ratio > tbody > tr:nth-child(5) > td:nth-child(3)')?.textContent);
+
+            if (this.preferences.includeTodayInStats) {
+                uploaded.value += uploadedToday.value;
+                downloaded.value += downloadedToday.value;
+                soloUpload.value += soloUploadToday.value;
+                bonus.value += bonusToday.value;
+            }
 
             // Update all stats in one call
             this.updateStats({
@@ -503,14 +516,23 @@
             const rawSettings = this.get(Config.STORAGE_KEYS.SETTINGS, {
                 hideDownloadedTorrents: false,
                 preferredFormats: Config.AVAILABLE_VIDEO_FORMATS,
-                batchOpenerState: Config.DEFAULT_BATCH_OPENER_STATE // Default value
+                batchOpenerState: Config.DEFAULT_BATCH_OPENER_STATE,
+                includeTodayInStats: false
             });
-            // No transformation needed unless settings become more complex
             return rawSettings;
         }
 
         static saveSettings(settings) {
             this.set(Config.STORAGE_KEYS.SETTINGS, settings);
+            // Also update current profile preferences and save profile
+            const profile = this.loadProfile();
+            if (profile && profile.preferences) {
+                // Only update known preferences
+                if ('hideDownloadedTorrents' in settings) profile.preferences.hideDownloadedTorrents = settings.hideDownloadedTorrents;
+                if ('includeTodayInStats' in settings) profile.preferences.includeTodayInStats = settings.includeTodayInStats;
+                // Add more preferences here as needed
+                this.saveProfile(profile);
+            }
         }
 
         static exportTampermonkeyStorage() {
@@ -1625,6 +1647,15 @@
             generalSettingsFieldset.appendChild(batchOpenerInput);
             generalSettingsFieldset.appendChild(batchOpenerLabel);
 
+            // --- Add Include Today In Stats Option ---
+            const includeTodayLabel = document.createElement('label');
+            includeTodayLabel.textContent = 'Include today\'s stats in totals';
+            const includeTodayInput = document.createElement('input');
+            includeTodayInput.type = 'checkbox';
+            includeTodayInput.name = 'includeTodayInStats';
+            generalSettingsFieldset.appendChild(includeTodayInput);
+            generalSettingsFieldset.appendChild(includeTodayLabel);
+
             settingsPane.appendChild(generalSettingsFieldset);
 
             // Add event listeners to inputs to show the warning when changes are made
@@ -1645,6 +1676,7 @@
             });
             hideDownloadedInput.checked = savedSettings.hideDownloadedTorrents;
             batchOpenerInput.checked = savedSettings.batchOpenerState;
+            includeTodayInput.checked = savedSettings.includeTodayInStats !== false; // default true
 
             const buttonContainer = document.createElement('div');
             buttonContainer.classList.add('cat');
@@ -1659,7 +1691,8 @@
                     ...savedSettings,
                     preferredFormats: selectedFormats,
                     hideDownloadedTorrents: hideDownloadedInput.checked,
-                    batchOpenerState: batchOpenerInput.checked
+                    batchOpenerState: batchOpenerInput.checked,
+                    includeTodayInStats: includeTodayInput.checked // <-- save preference
                 };
                 StorageManager.saveSettings(newSettings);
                 alert('Settings saved!');
@@ -1736,7 +1769,7 @@
         bannerContainer.style.top = '0';
         bannerContainer.style.left = '0';
         bannerContainer.style.width = '100%';
-        //bannerContainer.style.zIndex = '10000';
+        bannerContainer.style.zIndex = '999';
         bannerContainer.style.textAlign = 'center';
         bannerContainer.style.padding = '10px';
         bannerContainer.style.fontWeight = 'bold';
@@ -1813,6 +1846,15 @@
                 if (!profile.stats) profile.stats = { ratio: 0, uploaded: 0, downloaded: 0, soloUpload: 0, bonus: 0, lastUpdated: undefined };
 
                 profile.version = "2.3.0";
+                StorageManager.saveProfile(profile);
+                window.location.reload();
+                return;
+            }
+            if (profile.version && profile.version < "2.4.0") {
+                Utils.logDebug(`Migrating profile from version ${profile.version} to 2.4.0`);
+                profile.preferences.includeTodayInStats = true;
+
+                profile.version = "2.4.0";
                 StorageManager.saveProfile(profile);
                 window.location.reload();
                 return;
