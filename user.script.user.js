@@ -2,7 +2,7 @@
 // @name         PLHelper
 // @description  Makes downloading PL torrents easier, as well as having some more clarity on some pages.
 // @namespace    http://tampermonkey.net/
-// @version      2.3.0
+// @version      2.3.1
 // @author       Frankenst1
 // @match        https://pornolab.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pornolab.net
@@ -97,7 +97,8 @@
     class Profile {
         constructor(
             preferences = {
-                hideDownloadedTorrents: false
+                hideDownloadedTorrents: false,
+                includeTodayInStats: true
             },
             stats = {
                 ratio: 0,
@@ -122,22 +123,37 @@
             this.username = username;
         }
 
+        // --- Utility Improvements ---
+        static parseIdFromUrl(url, type) {
+            if (!url) return null;
+            let match;
+            switch (type) {
+                case 'topic':
+                    match = url.match(/\?f=(\d+)/);
+                    return match ? match[1] : null;
+                case 'torrent':
+                    match = url.match(/\?t=(\d+)/);
+                    return match ? match[1] : null;
+                default:
+                    this.logDebug(`Invalid URL type: ${type}`);
+                    return null;
+            }
+        }
+
+        // --- Defensive Programming for Torrent Add ---
         addDownloadedTorrent(torrent) {
-            Utils.logDebug("adding torrent to downloaded torrents: ", torrent);
+            if (!torrent || !torrent.id || !torrent.title) {
+                Utils.logDebug('Invalid torrent object, not adding:', torrent);
+                return;
+            }
             this.downloadedTorrents.push(torrent);
         }
-
-        removeDownloadedTorrent(torrentId) {
-            this.downloadedTorrents = this.downloadedTorrents.filter(torrent => torrent.id !== torrentId);
-        }
-
         addTorrentToList(torrent) {
-            Utils.logDebug("adding torrent to list: ", torrent);
+            if (!torrent || !torrent.id || !torrent.title) {
+                Utils.logDebug('Invalid torrent object, not adding:', torrent);
+                return;
+            }
             this.torrentList.push(torrent);
-        }
-
-        removeTorrentFromList(torrentId) {
-            this.torrentList = this.torrentList.filter(torrent => torrent.id !== torrentId);
         }
 
         updateStats(stats) {
@@ -145,13 +161,41 @@
         }
 
         updateStatsFromProfilePage() {
-            // Fetch stats from the page
-            const ratio = parseFloat(document.querySelector('#u_ratio b.gen')?.textContent || 0);
+            // Cache selectors for performance
+            const ratioEl = document.querySelector('#u_ratio b.gen');
+            const uploadedEl = document.querySelector('#u_up_total span.editable.bold');
+            const downloadedEl = document.querySelector('#u_down_total span.editable.bold');
+            const soloUploadEl = document.querySelector('#u_up_release span.editable.bold');
+            const bonusEl = document.querySelector('#u_up_bonus span.editable.bold');
+            const uploadedTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(3) > td:nth-child(3)');
+            const downloadedTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(2) > td:nth-child(3)');
+            const soloUploadTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(4) > td:nth-child(3)');
+            const bonusTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(5) > td:nth-child(3)');
+            const ratio = parseFloat(ratioEl?.textContent || '0');
+            const uploaded = Utils.parseSize(uploadedEl?.textContent) || { value: 0, unit: 'B' };
+            const downloaded = Utils.parseSize(downloadedEl?.textContent) || { value: 0, unit: 'B' };
+            const soloUpload = Utils.parseSize(soloUploadEl?.textContent) || { value: 0, unit: 'B' };
+            const bonus = Utils.parseSize(bonusEl?.textContent) || { value: 0, unit: 'B' };
+            const uploadedToday = Utils.parseSize(uploadedTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const downloadedToday = Utils.parseSize(downloadedTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const soloUploadToday = Utils.parseSize(soloUploadTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const bonusToday = Utils.parseSize(bonusTodayEl?.textContent) || { value: 0, unit: 'B' };
 
-            const uploaded = Utils.parseSize(document.querySelector('#u_up_total span.editable.bold')?.textContent)
-            const downloaded = Utils.parseSize(document.querySelector('#u_down_total span.editable.bold')?.textContent);
-            const soloUpload = Utils.parseSize(document.querySelector('#u_up_release span.editable.bold')?.textContent);
-            const bonus = Utils.parseSize(document.querySelector('#u_up_bonus span.editable.bold')?.textContent);
+            // Defensive: validate units
+            function validUnit(unit) {
+                return Config.SIZE_UNITS.includes(unit);
+            }
+            if (!validUnit(uploaded.unit) || !validUnit(downloaded.unit) || !validUnit(soloUpload.unit) || !validUnit(bonus.unit)) {
+                Utils.logDebug('Invalid unit detected in stats, skipping update.');
+                return;
+            }
+
+            if (this.preferences.includeTodayInStats) {
+                uploaded.value += uploadedToday.value;
+                downloaded.value += downloadedToday.value;
+                soloUpload.value += soloUploadToday.value;
+                bonus.value += bonusToday.value;
+            }
 
             // Update all stats in one call
             this.updateStats({
@@ -215,20 +259,63 @@
             return Number((bytes / Math.pow(1024, toIndex)).toFixed(2));
         }
 
+        // --- Defensive Unit Validation in Stats Update ---
+        updateStatsFromProfilePage() {
+            // Cache selectors
+            const ratioEl = document.querySelector('#u_ratio b.gen');
+            const uploadedEl = document.querySelector('#u_up_total span.editable.bold');
+            const downloadedEl = document.querySelector('#u_down_total span.editable.bold');
+            const soloUploadEl = document.querySelector('#u_up_release span.editable.bold');
+            const bonusEl = document.querySelector('#u_up_bonus span.editable.bold');
+            const uploadedTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(3) > td:nth-child(3)');
+            const downloadedTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(2) > td:nth-child(3)');
+            const soloUploadTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(4) > td:nth-child(3)');
+            const bonusTodayEl = document.querySelector('table.ratio > tbody > tr:nth-child(5) > td:nth-child(3)');
+            const ratio = parseFloat(ratioEl?.textContent || '0');
+            const uploaded = Utils.parseSize(uploadedEl?.textContent) || { value: 0, unit: 'B' };
+            const downloaded = Utils.parseSize(downloadedEl?.textContent) || { value: 0, unit: 'B' };
+            const soloUpload = Utils.parseSize(soloUploadEl?.textContent) || { value: 0, unit: 'B' };
+            const bonus = Utils.parseSize(bonusEl?.textContent) || { value: 0, unit: 'B' };
+            const uploadedToday = Utils.parseSize(uploadedTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const downloadedToday = Utils.parseSize(downloadedTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const soloUploadToday = Utils.parseSize(soloUploadTodayEl?.textContent) || { value: 0, unit: 'B' };
+            const bonusToday = Utils.parseSize(bonusTodayEl?.textContent) || { value: 0, unit: 'B' };
+            function validUnit(unit) { return Config.SIZE_UNITS.includes(unit); }
+            if (!validUnit(uploaded.unit) || !validUnit(downloaded.unit) || !validUnit(soloUpload.unit) || !validUnit(bonus.unit)) {
+                Utils.logDebug('Invalid unit detected in stats, skipping update.');
+                return;
+            }
+            if (this.preferences.includeTodayInStats) {
+                uploaded.value += uploadedToday.value;
+                downloaded.value += downloadedToday.value;
+                soloUpload.value += soloUploadToday.value;
+                bonus.value += bonusToday.value;
+            }
+            this.updateStats({
+                ratio: ratio,
+                uploaded: Utils.convertSizeBetweenUnits(uploaded.value, uploaded.unit, 'B'),
+                downloaded: Utils.convertSizeBetweenUnits(downloaded.value, downloaded.unit, 'B'),
+                soloUpload: Utils.convertSizeBetweenUnits(soloUpload.value, soloUpload.unit, 'B'),
+                bonus: Utils.convertSizeBetweenUnits(bonus.value, bonus.unit, 'B'),
+                lastUpdated: new Date().toString()
+            });
+            Utils.logDebug('Profile stats updated from page:', this.stats);
+        }
+
         static parseIdFromUrl(url, type) {
-            let id;
+            if (!url) return null;
+            let match;
             switch (type) {
                 case 'topic':
-                    id = url.split('?f=').pop();
-                    break;
+                    match = url.match(/\?f=(\d+)/);
+                    return match ? match[1] : null;
                 case 'torrent':
-                    id = url.split('?t=').pop();
-                    break;
+                    match = url.match(/\?t=(\d+)/);
+                    return match ? match[1] : null;
                 default:
                     this.logDebug(`Invalid URL type: ${type}`);
                     return null;
             }
-            return id;
         }
 
         static checkPage(page) {
@@ -503,14 +590,23 @@
             const rawSettings = this.get(Config.STORAGE_KEYS.SETTINGS, {
                 hideDownloadedTorrents: false,
                 preferredFormats: Config.AVAILABLE_VIDEO_FORMATS,
-                batchOpenerState: Config.DEFAULT_BATCH_OPENER_STATE // Default value
+                batchOpenerState: Config.DEFAULT_BATCH_OPENER_STATE,
+                includeTodayInStats: false
             });
-            // No transformation needed unless settings become more complex
             return rawSettings;
         }
 
         static saveSettings(settings) {
             this.set(Config.STORAGE_KEYS.SETTINGS, settings);
+            // Also update current profile preferences and save profile
+            const profile = this.loadProfile();
+            if (profile && profile.preferences) {
+                // Only update known preferences
+                if ('hideDownloadedTorrents' in settings) profile.preferences.hideDownloadedTorrents = settings.hideDownloadedTorrents;
+                if ('includeTodayInStats' in settings) profile.preferences.includeTodayInStats = settings.includeTodayInStats;
+                // Add more preferences here as needed
+                this.saveProfile(profile);
+            }
         }
 
         static exportTampermonkeyStorage() {
@@ -576,6 +672,33 @@
 
             alert('All Tampermonkey storage data has been cleared!');
             window.location.reload();
+        }
+
+        static exportProfileData() {
+            const profiles = StorageManager.getAllProfiles();
+            const data = JSON.stringify(profiles);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'PLHelperProfileBackup.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        static importProfileData(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function () {
+                try {
+                    const data = JSON.parse(reader.result);
+                    StorageManager.saveAllProfiles(data);
+                    alert('Profile data imported successfully!');
+                    window.location.reload();
+                } catch (error) {
+                    alert('Failed to import profile data.');
+                }
+            };
+            reader.readAsText(file);
         }
     };
 
@@ -767,10 +890,11 @@
     class UIHelpers {
         static addTorrentOpenerUI(torrents, element, legendText = null, options = {}) {
             const container = document.createElement('fieldset');
-
+            container.setAttribute('role', 'group'); // Accessibility
             if (legendText) {
                 const legend = document.createElement('legend');
                 legend.innerText = legendText;
+                legend.setAttribute('aria-label', legendText);
                 container.appendChild(legend);
             }
 
@@ -812,6 +936,15 @@
             }
 
             for (const [key, value] of Object.entries(torrents)) {
+                // Throttle/warning for large batch
+                if (value.length > 20) {
+                    const warning = document.createElement('div');
+                    warning.textContent = `Warning: You are about to open ${value.length} tabs. This may slow down your browser.`;
+                    warning.style.color = 'orange';
+                    warning.setAttribute('role', 'alert');
+                    container.appendChild(warning);
+                }
+
                 const progressBarId = `progress-${Utils.toSnakeCase(Utils.trimExcessWhitespace(key))}`;
                 const progressBar = UIHelpers.generateProgressBar(0, 100, null, progressBarId);
 
@@ -977,7 +1110,6 @@
                     const torrentId = target.getAttribute('data-id');
                     const row = target.closest('tr');
                     row.remove();
-
                     if (type === 'downloaded') {
                         profile.removeDownloadedTorrent(torrentId);
                     } else {
@@ -1080,16 +1212,30 @@
             }
 
             // Set an interval to update the countdown every second
-            setInterval(() => {
+            let intervalId = setInterval(() => {
                 const currentTime = new Date();
                 const timeRemaining = targetTime - currentTime;
 
                 if (timeRemaining <= 0) {
-                    countdownTime.textContent = "00:00:00";
+                    countdownTime.textContent = '00:00:00';
+                    clearInterval(intervalId);
                 } else {
                     countdownTime.textContent = Utils.formatCountdown(timeRemaining);
                 }
             }, 1000);
+
+            // Use MutationObserver to clean up interval if element is removed
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach(mutation => {
+                    mutation.removedNodes.forEach(node => {
+                        if (node === countdownContainer) {
+                            clearInterval(intervalId);
+                            observer.disconnect();
+                        }
+                    });
+                });
+            });
+            observer.observe(countdownContainer.parentNode || document.body, { childList: true });
 
             return countdownContainer;
         }
@@ -1169,12 +1315,14 @@
 
         static updateProgressBar(id, percentage) {
             const progressBar = document.getElementById(id);
-            progressBar.style.display = 'block';
-            progressBar.querySelector('div.progress-bar').style.width = `${percentage}%`;
-            progressBar.querySelector('span.progress-bar-value').innerText = `${percentage}%`;
-
-            if (percentage === 100) {
-                this.checkAndCloseTasksPane();
+            if (progressBar) {
+                progressBar.style.display = 'block';
+                const bar = progressBar.querySelector('.progress-bar');
+                if (bar) {
+                    bar.style.width = `${percentage}%`;
+                    const valueSpan = bar.querySelector('.progress-bar-value');
+                    if (valueSpan) valueSpan.textContent = `${percentage}%`;
+                }
             }
         }
 
@@ -1302,7 +1450,37 @@
             const tasksPane = this.createPane('tasks-pane', 'Background Tasks', { top: '10px', left: '10px' });
             tasksPane.style.display = 'none';
         }
-    };
+
+        // --- Settings panel accessible via Tampermonkey menu ---
+        static showSettingsPanel() {
+            const panel = document.createElement('div');
+            panel.id = 'plhelper-settings-panel';
+            panel.style.position = 'fixed';
+            panel.style.top = '10px';
+            panel.style.right = '10px';
+            panel.style.background = '#fff';
+            panel.style.border = '1px solid #ccc';
+            panel.style.padding = '10px';
+            panel.style.zIndex = '9999';
+            panel.innerHTML = `<h3>PLHelper Settings</h3>
+                <label><input type='checkbox' id='plhelper-debug-mode' ${Config.DEBUG_MODE ? 'checked' : ''}/> Debug Mode</label><br>
+                <label>Batch Opener Delay (ms): <input type='number' id='plhelper-url-delay' value='${Config.URL_DELAY}' min='100' step='100'/></label><br>
+                <button id='plhelper-close-settings'>Close</button>`;
+            document.body.appendChild(panel);
+            document.getElementById('plhelper-close-settings').onclick = () => panel.remove();
+            document.getElementById('plhelper-debug-mode').onchange = (e) => {
+                Config.DEBUG_MODE = e.target.checked;
+            };
+            document.getElementById('plhelper-url-delay').onchange = (e) => {
+                Config.URL_DELAY = parseInt(e.target.value, 10);
+            };
+        }
+    }; // End of UIHelpers class
+
+    // Register menu command for settings panel (must be outside class)
+    if (typeof GM_registerMenuCommand === 'function') {
+        GM_registerMenuCommand('PLHelper Settings', () => UIHelpers.showSettingsPanel());
+    }
 
     // ==Page Handlers==
     class TrackerHelpers {
@@ -1625,6 +1803,15 @@
             generalSettingsFieldset.appendChild(batchOpenerInput);
             generalSettingsFieldset.appendChild(batchOpenerLabel);
 
+            // --- Add Include Today In Stats Option ---
+            const includeTodayLabel = document.createElement('label');
+            includeTodayLabel.textContent = 'Include today\'s stats in totals';
+            const includeTodayInput = document.createElement('input');
+            includeTodayInput.type = 'checkbox';
+            includeTodayInput.name = 'includeTodayInStats';
+            generalSettingsFieldset.appendChild(includeTodayInput);
+            generalSettingsFieldset.appendChild(includeTodayLabel);
+
             settingsPane.appendChild(generalSettingsFieldset);
 
             // Add event listeners to inputs to show the warning when changes are made
@@ -1645,6 +1832,7 @@
             });
             hideDownloadedInput.checked = savedSettings.hideDownloadedTorrents;
             batchOpenerInput.checked = savedSettings.batchOpenerState;
+            includeTodayInput.checked = savedSettings.includeTodayInStats !== false; // default true
 
             const buttonContainer = document.createElement('div');
             buttonContainer.classList.add('cat');
@@ -1659,7 +1847,8 @@
                     ...savedSettings,
                     preferredFormats: selectedFormats,
                     hideDownloadedTorrents: hideDownloadedInput.checked,
-                    batchOpenerState: batchOpenerInput.checked
+                    batchOpenerState: batchOpenerInput.checked,
+                    includeTodayInStats: includeTodayInput.checked // <-- save preference
                 };
                 StorageManager.saveSettings(newSettings);
                 alert('Settings saved!');
@@ -1736,7 +1925,7 @@
         bannerContainer.style.top = '0';
         bannerContainer.style.left = '0';
         bannerContainer.style.width = '100%';
-        //bannerContainer.style.zIndex = '10000';
+        bannerContainer.style.zIndex = '999';
         bannerContainer.style.textAlign = 'center';
         bannerContainer.style.padding = '10px';
         bannerContainer.style.fontWeight = 'bold';
@@ -1756,6 +1945,7 @@
             bannerContainer.appendChild(debugBanner);
         }
 
+
         if (bannerContainer.children.length > 0) {
             document.body.style.marginTop = `${bannerContainer.offsetHeight}px`; // Adjust page margin
             document.body.prepend(bannerContainer);
@@ -1763,7 +1953,7 @@
     }
 
     // ==Main==
-    function initializeScript() {
+    function initializeScript(){
         try {
             addTopBanner();
             MenuItems.registerAllMenuItems();
@@ -1813,6 +2003,15 @@
                 if (!profile.stats) profile.stats = { ratio: 0, uploaded: 0, downloaded: 0, soloUpload: 0, bonus: 0, lastUpdated: undefined };
 
                 profile.version = "2.3.0";
+                StorageManager.saveProfile(profile);
+                window.location.reload();
+                return;
+            }
+            if (profile.version && profile.version < "2.4.0") {
+                Utils.logDebug(`Migrating profile from version ${profile.version} to 2.4.0`);
+                profile.preferences.includeTodayInStats = true;
+
+                profile.version = "2.4.0";
                 StorageManager.saveProfile(profile);
                 window.location.reload();
                 return;
@@ -1889,4 +2088,4 @@
     }
 
     initializeScript();
-})();
+})(); // End of IIFE
